@@ -183,10 +183,9 @@ CORS_ALLOW_ALL_ORIGINS = True
 
 # CẤU HÌNH CLOUDINARY
 CLOUDINARY_STORAGE = {
-    'CLOUD_NAME': 'tên_cloud_của_bạn_vừa_copy',
-    'API_KEY': 'api_key_của_bạn_vừa_copy',
-    'API_SECRET': 'api_secret_của_bạn_vừa_copy'
+    'CLOUD_NAME': 'ditenqkxk',
+    'API_KEY': '137566147869745',
+    'API_SECRET': 'Bg2NDuYprwGT2tskwKq80BHkAMQ'
 }
 
-# Bảo Django: "Từ nay ai up ảnh thì tự động đẩy sang Cloudinary nhé!"
 DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
