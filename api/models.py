@@ -16,7 +16,7 @@ class User(AbstractUser):
     # 👉 THÊM TÊN TIẾNG VIỆT VÀO ĐẦU MỖI TRƯỜNG
     phone = models.CharField('Số điện thoại', max_length=15, blank=True, null=True)
     address = models.TextField('Địa chỉ liên hệ', blank=True, null=True)
-    avatar = models.ImageField('Ảnh đại diện', upload_to='avatars/', blank=True, null=True)
+    avatar = models.ImageField('Ảnh đại diện', upload_to='avatars/users/', blank=True, null=True)
     role = models.CharField('Vai trò', max_length=20, default='customer')
 
     def save(self, *args, **kwargs):
@@ -37,7 +37,7 @@ class Store(models.Model):
     store_name = models.CharField(max_length=255)
     description = models.TextField(null=True, blank=True)
     address = models.CharField(max_length=255, null=True, blank=True)
-    avatar_url = models.URLField(null=True, blank=True)
+    avatar_url = models.ImageField(upload_to='avatars/stores/', max_length=255)
     
     # Kinh doanh
     rating = models.DecimalField(max_digits=3, decimal_places=2, default=0.0)
