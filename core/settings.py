@@ -41,6 +41,9 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'cloudinary_storage',
+    'django.contrib.staticfiles',
+    'cloudinary',
     'rest_framework',
     'corsheaders', 
     'rest_framework.authtoken',
@@ -90,8 +93,16 @@ WSGI_APPLICATION = 'core.wsgi.application'
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
 DATABASES = {
+    # 'default': {
+    #     'ENGINE': 'django.db.backends.postgresql',
+    #     'NAME': 'ecommerce_db',
+    #     'USER': 'postgres',
+    #     'PASSWORD': 'minhtan1504',
+    #     'HOST': 'localhost',
+    #     'PORT': '5432',
+    # }
     'default': dj_database_url.config(
-        default='sqlite:///db.sqlite3',
+        default='postgresql://ecomhub_db_zywo_user:grbC8ebRKyVEDVm1Zxhx2P4Co4mpCoVE@dpg-d8d8h24p3tds73f9uvh0-a.oregon-postgres.render.com/ecomhub_db_zywo',
         conn_max_age=600
     )
 }
@@ -169,3 +180,13 @@ CHANNEL_LAYERS = {
 
 # Cho phép mọi nơi gọi vào (Chỉ dùng cho dev)
 CORS_ALLOW_ALL_ORIGINS = True
+
+# CẤU HÌNH CLOUDINARY
+CLOUDINARY_STORAGE = {
+    'CLOUD_NAME': 'tên_cloud_của_bạn_vừa_copy',
+    'API_KEY': 'api_key_của_bạn_vừa_copy',
+    'API_SECRET': 'api_secret_của_bạn_vừa_copy'
+}
+
+# Bảo Django: "Từ nay ai up ảnh thì tự động đẩy sang Cloudinary nhé!"
+DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
