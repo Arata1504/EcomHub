@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import CartAPIView, CartItemDeleteAPIView, CategoryViewSet, StoreViewSet, get_chat_messages, get_or_create_chat, get_store_chats, get_user_chats, login_view, register_view, ProductViewSet, OrderViewSet, google_login, update_avatar, ReviewViewSet
+from .views import CartAPIView, CartItemDeleteAPIView, CategoryViewSet, SendOTPView, StoreViewSet, VerifyOTPView, get_chat_messages, get_or_create_chat, get_store_chats, get_user_chats, login_view, register_view, ProductViewSet, OrderViewSet, google_login, update_avatar, ReviewViewSet
 from api import views
 
 # Tạo router tự động cho Product và Order
@@ -15,6 +15,8 @@ urlpatterns = [
     path('auth/login/', login_view, name='login'),
     path('auth/register/', register_view, name='register'),
     path('auth/google/', google_login, name='google_login'),
+    path('auth/send-otp/', SendOTPView.as_view(), name='send_otp'),
+    path('auth/verify-otp/', VerifyOTPView.as_view(), name='verify_otp'),
 
     # API Products & Orders (Tự động)
     path('', include(router.urls)),

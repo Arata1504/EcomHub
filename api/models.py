@@ -1,3 +1,5 @@
+from datetime import timedelta, timezone
+
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 
@@ -37,7 +39,7 @@ class Store(models.Model):
     store_name = models.CharField(max_length=255)
     description = models.TextField(null=True, blank=True)
     address = models.CharField(max_length=255, null=True, blank=True)
-    avatar_url = models.ImageField(upload_to='avatars/stores/', max_length=255)
+    avatar_url = models.ImageField(upload_to='avatars/stores/', max_length=255,null=True, blank=True)
     
     # Kinh doanh
     rating = models.DecimalField(max_digits=3, decimal_places=2, default=0.0)
@@ -95,8 +97,6 @@ class ProductImage(models.Model):
 
     def __str__(self):
         return f"Image for {self.product.name}"
-    
-
     
 class Attribute(models.Model):
     name = models.CharField(max_length=100)
@@ -174,9 +174,6 @@ class ReviewImage(models.Model):
     review = models.ForeignKey(Review, on_delete=models.CASCADE, related_name='images')
     image = models.ImageField(upload_to='reviews/images/')    
 
-# ==========================================
-# 7. BẢNG CHAT VÀ MESSAGE (REALTIME)
-# ==========================================
 
 class Chat(models.Model):
     customer = models.ForeignKey(User, on_delete=models.CASCADE, related_name='customer_chats')
@@ -212,3 +209,15 @@ class Message(models.Model):
 
     def __str__(self):
         return f"{self.sender.username}: {self.content[:20]}"
+    
+class OTPToken(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="otp_tokens")
+    otp_code = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def is_valid(self):
+        # Mã OTP chỉ có giá trị hiệu lực trong vòng 5 phút kể từ lúc sinh
+        return timezone.now() < self.created_at + timedelta(minutes=5)
+
+    def __str__(self):
+        return f"OTP của {self.user.email} - {self.otp_code}"

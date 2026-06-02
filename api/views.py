@@ -1,3 +1,5 @@
+import random
+
 from django.http import JsonResponse
 from django.utils import timezone
 from decimal import Decimal
@@ -8,12 +10,12 @@ from rest_framework.response import Response
 from rest_framework.decorators import action, api_view, parser_classes, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.authtoken.models import Token
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import MultiPartParser, FormParser, settings
 from django.contrib.auth import authenticate
 from django.db import transaction
 from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
-from .models import Category, Chat, Message, Product, Order, OrderItem, ProductVariant, Review, ReviewImage, Store, CartItem
+from .models import Category, Chat, Message, OTPToken, Product, Order, OrderItem, ProductVariant, Review, ReviewImage, Store, CartItem
 from .serializers import CategorySerializer, ChatSerializer, MessageSerializer, ProductSerializer, OrderSerializer, ReviewSerializer, StoreSerializer, UserSerializer, CartItemSerializer
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
@@ -295,6 +297,67 @@ def mark_chat_read(request, chat_id):
 
 
 # --- PHẦN 2: VIEWSETS (CRUD Tự động) ---
+class SendOTPView(APIView):
+    """API gửi mã OTP 6 số về Gmail khách hàng"""
+    def post(self, request):
+        email = request.data.get('email', '').strip()
+        
+        if not email:
+            return Response({"error": "Vui lòng cung cấp địa chỉ Email!"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response({"error": "Email này chưa được đăng ký trên hệ thống!"}, status=status.HTTP_404_NOT_FOUND)
+
+        # 1. Sinh ngẫu nhiên mã OTP gồm 6 chữ số
+        otp = f"{random.randint(100000, 999999)}"
+        
+        # 2. Xóa các mã cũ của user này (nếu có) và lưu mã mới vào DB
+        OTPToken.objects.filter(user=user).delete()
+        OTPToken.objects.create(user=user, otp_code=otp)
+
+        # 3. Tiến hành bắn Mail về hòm thư người dùng
+        subject = "Mã Xác Thực OTP - Hệ Thống E-Commerce Hub"
+        message = (
+            f"Chào {user.username},\n\n"
+            f"Bạn vừa yêu cầu mã xác thực từ ứng dụng E-Commerce.\n"
+            f"Mã OTP của bạn là: {otp}\n\n"
+            f"Lưu ý: Mã này có hiệu lực trong vòng 5 phút và chỉ sử dụng 1 lần duy nhất. "
+            f"Tuyệt đối không chia sẻ mã này cho bất kỳ ai."
+        )
+        
+        try:
+            send_mail(subject, message, settings.EMAIL_HOST_USER, [email], fail_silently=False)
+            return Response({"message": "Mã OTP đã được gửi thành công qua Gmail của bạn!"}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": f"Không thể gửi mail. Chi tiết lỗi: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class VerifyOTPView(APIView):
+    """API kiểm tra mã OTP khách hàng nhập từ App Flutter"""
+    def post(self, request):
+        email = request.data.get('email', '').strip()
+        otp_code = request.data.get('otp_code', '').strip()
+
+        if not email or not otp_code:
+            return Response({"error": "Vui lòng điền đầy đủ Email và mã OTP!"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = User.objects.get(email=email)
+            # Lấy mã OTP mới nhất của người dùng này
+            otp_token = OTPToken.objects.filter(user=user, otp_code=otp_code).latest('created_at')
+        except (User.DoesNotExist, OTPToken.DoesNotExist):
+            return Response({"error": "Mã xác thực OTP hoặc Email không chính xác!"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Kiểm tra thời hạn 5 phút
+        if not otp_token.is_valid():
+            return Response({"error": "Mã OTP của bạn đã hết hạn sử dụng!"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Xác thực thành công -> Hủy mã OTP để tránh dùng lại lần 2
+        otp_token.delete()
+        
+        return Response({"message": "Xác thực OTP thành công!"}, status=status.HTTP_200_OK)
 
 # 1. Quản lý Sản phẩm (Xem, Thêm, Sửa, Xóa)
 
@@ -372,7 +435,6 @@ class ProductViewSet(viewsets.ModelViewSet):
             
             raise ValidationError({"error": "Bạn chưa có cửa hàng để thêm sản phẩm."})
 
-# 2. Quản lý Đơn hàng
 class OrderViewSet(viewsets.ModelViewSet):
     serializer_class = OrderSerializer
     permission_classes = [IsAuthenticated]
