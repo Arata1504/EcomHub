@@ -1,9 +1,11 @@
+import os
 import random
 from django.core.mail import send_mail
 from django.http import JsonResponse
 from django.utils import timezone
 from decimal import Decimal
 from django.contrib.auth import get_user_model
+import requests
 from rest_framework.exceptions import ValidationError
 from rest_framework import viewsets, status, generics
 from rest_framework.response import Response
@@ -298,22 +300,22 @@ def mark_chat_read(request, chat_id):
 
 # --- PHẦN 2: VIEWSETS (CRUD Tự động) ---
 class SendOTPView(APIView):
-    """API gửi mã OTP về Gmail để chuẩn bị đăng ký tài khoản mới"""
+    """API gửi mã OTP qua HTTP API của Brevo (Vượt tường lửa Render)"""
     def post(self, request):
         email = request.data.get('email', '').strip()
         if not email:
             return Response({"error": "Vui lòng cung cấp địa chỉ Email!"}, status=status.HTTP_400_BAD_REQUEST)
             
-        # 👉 LUỒNG ĐĂNG KÝ: Nếu Email đã có người dùng rồi thì chặn luôn không cho đăng ký nữa
+        # Kiểm tra xem email đã tồn tại trong hệ thống chưa
         if User.objects.filter(email=email).exists():
             return Response({"error": "Email này đã được đăng ký trên hệ thống rồi!"}, status=status.HTTP_400_BAD_REQUEST)
 
+        # 1. Sinh mã OTP và lưu vào Database
         otp = f"{random.randint(100000, 999999)}"
-        
-        # Xóa các mã OTP cũ của email này và tạo mã mới
         OTPToken.objects.filter(email=email).delete()
         OTPToken.objects.create(email=email, otp_code=otp)
 
+        # 2. Chuẩn bị nội dung mail
         subject = "Mã Xác Thực Tạo Tài Khoản - E-Commerce Hub"
         message = (
             f"Chào bạn,\n\n"
@@ -322,11 +324,36 @@ class SendOTPView(APIView):
             f"Mã này có hiệu lực trong 5 phút. Vui lòng không chia sẻ mã này cho bất kỳ ai."
         )
         
+        # 3. 👉 BẮN REQUEST QUA CỔNG HTTPS CỦA BREVO (Bỏ qua cấu hình SMTP cũ)
+        api_key = os.environ.get('BREVO_API_KEY') # Lấy khóa API từ Render
+        url = "https://api.brevo.com/v3/smtp/email"
+        
+        headers = {
+            "accept": "application/json",
+            "api-key": api_key,
+            "content-type": "application/json"
+        }
+        
+        payload = {
+            # THAY EMAIL DƯỚI ĐÂY bằng chính email bạn vừa dùng để đăng ký tài khoản Brevo
+            "sender": {"name": "E-Commerce Hub", "email": "tranminhtan2003@gmail.com"}, 
+            "to": [{"email": email}],
+            "subject": subject,
+            "textContent": message
+        }
+        
         try:
-            send_mail(subject, message, settings.EMAIL_HOST_USER, [email], fail_silently=False)
-            return Response({"message": "Mã OTP đã được gửi về Gmail của bạn!"}, status=status.HTTP_200_OK)
+            # Gửi tín hiệu HTTP POST đi
+            response = requests.post(url, json=payload, headers=headers)
+            
+            # Nếu Brevo báo thành công (Mã 200, 201 hoặc 202)
+            if response.status_code in [200, 201, 202]:
+                return Response({"message": "Mã OTP đã được gửi thành công!"}, status=status.HTTP_200_OK)
+            else:
+                return Response({"error": f"Máy chủ mail từ chối: {response.text}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                
         except Exception as e:
-            return Response({"error": f"Lỗi gửi mail: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({"error": f"Lỗi gọi API ngoại: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class VerifyOTPView(APIView):
