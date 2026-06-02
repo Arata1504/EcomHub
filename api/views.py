@@ -1,5 +1,5 @@
 import random
-
+from django.core.mail import send_mail
 from django.http import JsonResponse
 from django.utils import timezone
 from decimal import Decimal
@@ -298,66 +298,53 @@ def mark_chat_read(request, chat_id):
 
 # --- PHẦN 2: VIEWSETS (CRUD Tự động) ---
 class SendOTPView(APIView):
-    """API gửi mã OTP 6 số về Gmail khách hàng"""
+    """API gửi mã OTP về Gmail để chuẩn bị đăng ký tài khoản mới"""
     def post(self, request):
         email = request.data.get('email', '').strip()
-        
         if not email:
             return Response({"error": "Vui lòng cung cấp địa chỉ Email!"}, status=status.HTTP_400_BAD_REQUEST)
             
-        try:
-            user = User.objects.get(email=email)
-        except User.DoesNotExist:
-            return Response({"error": "Email này chưa được đăng ký trên hệ thống!"}, status=status.HTTP_404_NOT_FOUND)
+        # 👉 LUỒNG ĐĂNG KÝ: Nếu Email đã có người dùng rồi thì chặn luôn không cho đăng ký nữa
+        if User.objects.filter(email=email).exists():
+            return Response({"error": "Email này đã được đăng ký trên hệ thống rồi!"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 1. Sinh ngẫu nhiên mã OTP gồm 6 chữ số
         otp = f"{random.randint(100000, 999999)}"
         
-        # 2. Xóa các mã cũ của user này (nếu có) và lưu mã mới vào DB
-        OTPToken.objects.filter(user=user).delete()
-        OTPToken.objects.create(user=user, otp_code=otp)
+        # Xóa các mã OTP cũ của email này và tạo mã mới
+        OTPToken.objects.filter(email=email).delete()
+        OTPToken.objects.create(email=email, otp_code=otp)
 
-        # 3. Tiến hành bắn Mail về hòm thư người dùng
-        subject = "Mã Xác Thực OTP - Hệ Thống E-Commerce Hub"
+        subject = "Mã Xác Thực Tạo Tài Khoản - E-Commerce Hub"
         message = (
-            f"Chào {user.username},\n\n"
-            f"Bạn vừa yêu cầu mã xác thực từ ứng dụng E-Commerce.\n"
-            f"Mã OTP của bạn là: {otp}\n\n"
-            f"Lưu ý: Mã này có hiệu lực trong vòng 5 phút và chỉ sử dụng 1 lần duy nhất. "
-            f"Tuyệt đối không chia sẻ mã này cho bất kỳ ai."
+            f"Chào bạn,\n\n"
+            f"Bạn đang thực hiện đăng ký tài khoản mới trên hệ thống E-Commerce Hub.\n"
+            f"Mã OTP xác thực Gmail của bạn là: {otp}\n\n"
+            f"Mã này có hiệu lực trong 5 phút. Vui lòng không chia sẻ mã này cho bất kỳ ai."
         )
         
         try:
             send_mail(subject, message, settings.EMAIL_HOST_USER, [email], fail_silently=False)
-            return Response({"message": "Mã OTP đã được gửi thành công qua Gmail của bạn!"}, status=status.HTTP_200_OK)
+            return Response({"message": "Mã OTP đã được gửi về Gmail của bạn!"}, status=status.HTTP_200_OK)
         except Exception as e:
-            return Response({"error": f"Không thể gửi mail. Chi tiết lỗi: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({"error": f"Lỗi gửi mail: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class VerifyOTPView(APIView):
-    """API kiểm tra mã OTP khách hàng nhập từ App Flutter"""
+    """API đối chiếu mã OTP từ App Flutter gửi lên"""
     def post(self, request):
         email = request.data.get('email', '').strip()
         otp_code = request.data.get('otp_code', '').strip()
 
-        if not email or not otp_code:
-            return Response({"error": "Vui lòng điền đầy đủ Email và mã OTP!"}, status=status.HTTP_400_BAD_REQUEST)
-
         try:
-            user = User.objects.get(email=email)
-            # Lấy mã OTP mới nhất của người dùng này
-            otp_token = OTPToken.objects.filter(user=user, otp_code=otp_code).latest('created_at')
-        except (User.DoesNotExist, OTPToken.DoesNotExist):
-            return Response({"error": "Mã xác thực OTP hoặc Email không chính xác!"}, status=status.HTTP_400_BAD_REQUEST)
+            otp_token = OTPToken.objects.filter(email=email, otp_code=otp_code).latest('created_at')
+        except OTPToken.DoesNotExist:
+            return Response({"error": "Mã xác thực OTP không chính xác!"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Kiểm tra thời hạn 5 phút
         if not otp_token.is_valid():
-            return Response({"error": "Mã OTP của bạn đã hết hạn sử dụng!"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "Mã OTP của bạn đã hết hạn!"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Xác thực thành công -> Hủy mã OTP để tránh dùng lại lần 2
-        otp_token.delete()
-        
-        return Response({"message": "Xác thực OTP thành công!"}, status=status.HTTP_200_OK)
+        otp_token.delete() # Xác thực xong thì xóa mã tránh dùng lại
+        return Response({"message": "Xác thực thành công!"}, status=status.HTTP_200_OK)
 
 # 1. Quản lý Sản phẩm (Xem, Thêm, Sửa, Xóa)
 

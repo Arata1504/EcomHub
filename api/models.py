@@ -174,7 +174,6 @@ class ReviewImage(models.Model):
     review = models.ForeignKey(Review, on_delete=models.CASCADE, related_name='images')
     image = models.ImageField(upload_to='reviews/images/')    
 
-
 class Chat(models.Model):
     customer = models.ForeignKey(User, on_delete=models.CASCADE, related_name='customer_chats')
     store = models.ForeignKey(Store, on_delete=models.CASCADE, related_name='store_chats')
@@ -211,13 +210,12 @@ class Message(models.Model):
         return f"{self.sender.username}: {self.content[:20]}"
     
 class OTPToken(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="otp_tokens")
+    email = models.EmailField(max_length=255)
     otp_code = models.CharField(max_length=6)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def is_valid(self):
-        # Mã OTP chỉ có giá trị hiệu lực trong vòng 5 phút kể từ lúc sinh
         return timezone.now() < self.created_at + timedelta(minutes=5)
 
     def __str__(self):
-        return f"OTP của {self.user.email} - {self.otp_code}"
+        return f"OTP của {self.email} - {self.otp_code}"
