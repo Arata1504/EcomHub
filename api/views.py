@@ -383,9 +383,13 @@ class SystemChatBotView(APIView):
         
         if not user_message:
             return Response({"error": "Vui lòng nhập câu hỏi!"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        user = request.user
 
         db_context = ""
+        personal_context = ""
         try:
+            # === PHẦN 1: TÌM KIẾM SẢN PHẨM  ===
             # 1. GỘP CHUNG 2 CÂU HỎI ĐỂ LẤY TỪ KHÓA (Ví dụ: "macbook air" + "sản phẩm này bán bao nhiêu cái")
             search_text = f"{previous_message} {user_message}"
             words = search_text.split()
@@ -415,23 +419,69 @@ class SystemChatBotView(APIView):
                 products = Product.objects.filter(and_query).distinct()[:5]
 
             if products.exists():
-                db_context = "THÔNG TIN SẢN PHẨM TỪ HỆ THỐNG ĐANG BÁN:\n"
+                db_context = "THÔNG TIN CHI TIẾT CÁC SẢN PHẨM TRONG HỆ THỐNG:\n\n"
                 for p in products:
-                    # 👉 LẤY SỐ LƯỢNG ĐÃ BÁN (Tự động thích ứng với tên cột của bạn)
+                    # 1. Lấy các thông số cơ bản (Dùng getattr để chống lỗi sập web nếu thiếu cột)
                     sold_qty = getattr(p, 'sold', getattr(p, 'sold_count', getattr(p, 'sold_quantity', 0)))
-                    db_context += f"- Sản phẩm: {p.name} | Giá: {p.price} VNĐ | Đã bán: {sold_qty} cái\n"
+                    stock_qty = getattr(p, 'stock', getattr(p, 'quantity', 'Không xác định'))
+                    desc = getattr(p, 'description', getattr(p, 'detail', 'Không có mô tả'))
+                    
+                    # 2. Lấy tên danh mục (Nếu bạn có liên kết bảng Category)
+                    category = p.category.name if hasattr(p, 'category') and p.category else 'Chưa phân loại'
+
+                    # 3. NHỒI TOÀN BỘ VÀO BẢN BÁO CÁO CHO AI ĐỌC
+                    db_context += (
+                        f"Tên sản phẩm: {p.name}\n"
+                        f"- Giá bán: {p.price} VNĐ\n"
+                        f"- Phân loại/Danh mục: {category}\n"
+                        f"- Số lượng tồn kho: {stock_qty} cái | Đã bán được: {sold_qty} cái\n"
+                        f"- Mô tả chi tiết & Thông số kỹ thuật: {desc}\n"
+                        f"--------------------------------------------------\n"
+                    )
             else:
                 db_context = "Hệ thống không tìm thấy sản phẩm nào khớp với từ khóa."
+
+            # === PHẦN 2: LẤY LỊCH SỬ CÁ NHÂN (NẾU USER ĐÃ ĐĂNG NHẬP) ===
+            if user.is_authenticated:
+                # Phân tích xem khách có đang hỏi về thông tin cá nhân không
+                personal_keywords = ['tôi', 'của tôi', 'đơn hàng', 'đã mua', 'nhắn tin', 'lịch sử', 'cửa hàng này']
+                is_asking_personal = any(kw in user_message.lower() or kw in previous_message.lower() for kw in personal_keywords)
+
+                if is_asking_personal:
+                    personal_context = "\n--- THÔNG TIN CÁ NHÂN CỦA KHÁCH HÀNG (CHỈ DÙNG KHI ĐƯỢC HỎI) ---\n"
+                    
+                    # A. Lấy lịch sử mua hàng (Ví dụ: 5 đơn hàng gần nhất)
+                    # Lưu ý: Đổi tên Model Order và các trường cho khớp với Database của bạn
+                    recent_orders = Order.objects.filter(buyer=user).order_by('-created_at')[:5]
+                    if recent_orders.exists():
+                        personal_context += "Lịch sử mua hàng:\n"
+                        for order in recent_orders:
+                            personal_context += f"- Đã mua '{order.product.name}' từ cửa hàng '{order.seller.shop_name}' vào ngày {order.created_at.strftime('%d/%m/%Y')}. Trạng thái: {order.status}\n"
+                    else:
+                        personal_context += "Khách hàng chưa từng mua sản phẩm nào trên hệ thống.\n"
+
+                    # B. Lấy lịch sử nhắn tin với các cửa hàng
+                    # Lưu ý: Đổi tên Model Message cho khớp
+                    recent_chats = Chat.objects.filter(sender=user).values_list('receiver__shop_name', flat=True).distinct()
+                    if recent_chats:
+                        shops = ", ".join(recent_chats)
+                        personal_context += f"Lịch sử nhắn tin: Khách hàng đã từng nhắn tin với các cửa hàng: {shops}.\n"
+                    else:
+                        personal_context += "Khách hàng chưa từng nhắn tin với cửa hàng nào.\n"
                 
         except Exception as e:
             db_context = "Dữ liệu sản phẩm tạm thời không truy xuất được."
 
         # 2. PROMPT AI ĐÃ CÓ TRÍ NHỚ
         system_instruction = (
-            "Bạn là 'E-Com Assistant', trợ lý ảo thông minh của sàn thương mại điện tử C2C. "
-            "Nhiệm vụ của bạn là tư vấn cho khách hàng một cách lịch sự, thân thiện, ngắn gọn và hữu ích. "
+            "Bạn là 'E-Com Assistant', chuyên gia tư vấn bán hàng cấp cao của sàn thương mại điện tử C2C. "
+            "Bạn đang được cung cấp quyền truy cập vào Database chi tiết của các sản phẩm. "
             f"\n\n{db_context}\n\n"
-            "QUY TẮC: Hãy dựa CHÍNH XÁC vào dữ liệu hệ thống cung cấp ở trên để trả lời. Tuyệt đối không tự bịa ra thông tin."
+            "NHIỆM VỤ CỦA BẠN:\n"
+            "1. Lắng nghe nhu cầu của khách hàng.\n"
+            "2. Đọc thật kỹ phần 'Mô tả chi tiết & Thông số kỹ thuật' của sản phẩm tôi vừa cung cấp ở trên để tư vấn sâu về công năng, chất liệu, xuất xứ (nếu có).\n"
+            "3. Trả lời một cách tự nhiên, thuyết phục như một người bán hàng chuyên nghiệp, không trả lời cụt lủn.\n"
+            "4. TUYỆT ĐỐI KHÔNG bịa đặt ra các thông số, tính năng hay giá tiền không có trong đoạn dữ liệu trên."
         )
 
         try:
