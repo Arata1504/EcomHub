@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import CartAPIView, CartItemDeleteAPIView, CategoryViewSet, SendOTPView, StoreViewSet, VerifyOTPView, get_chat_messages, get_or_create_chat, get_store_chats, get_user_chats, login_view, register_view, ProductViewSet, OrderViewSet, google_login, update_avatar, ReviewViewSet
+from .views import CartAPIView, CartItemDeleteAPIView, CategoryViewSet, SendOTPView, StoreViewSet, SystemChatBotView, VerifyOTPView, get_chat_messages, get_or_create_chat, get_store_chats, get_user_chats, login_view, register_view, ProductViewSet, OrderViewSet, google_login, update_avatar, ReviewViewSet
 from api import views
 
 # Tạo router tự động cho Product và Order
@@ -30,4 +30,5 @@ urlpatterns = [
     path('chats/get-or-create/', get_or_create_chat, name='get_or_create_chat'),
     path('chats/update-status/', views.update_online_status, name='update_online_status'),
     path('chats/<int:chat_id>/read/', views.mark_chat_read, name='mark_chat_read'),
+    path('chat/system-bot/', SystemChatBotView.as_view(), name='system_chatbot'),
 ] + router.urls

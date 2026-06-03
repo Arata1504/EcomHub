@@ -1,5 +1,7 @@
 import os
 import random
+import google.generativeai as genai
+from django.db.models import Q
 from django.core.mail import send_mail
 from django.http import JsonResponse
 from django.utils import timezone
@@ -355,7 +357,6 @@ class SendOTPView(APIView):
         except Exception as e:
             return Response({"error": f"Lỗi gọi API ngoại: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
 class VerifyOTPView(APIView):
     """API đối chiếu mã OTP từ App Flutter gửi lên"""
     def post(self, request):
@@ -373,6 +374,61 @@ class VerifyOTPView(APIView):
         otp_token.delete() # Xác thực xong thì xóa mã tránh dùng lại
         return Response({"message": "Xác thực thành công!"}, status=status.HTTP_200_OK)
 
+class SystemChatBotView(APIView):
+    """API Trợ lý ảo AI - Đọc Database và trả lời khách hàng"""
+    def post(self, request):
+        user_message = request.data.get('message', '').strip()
+        
+        if not user_message:
+            return Response({"error": "Vui lòng nhập câu hỏi!"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 1. TÌM KIẾM DỮ LIỆU TỪ DATABASE
+        db_context = ""
+        try:
+            # Tìm 5 sản phẩm có tên hoặc mô tả khớp với câu hỏi của khách
+            products = Product.objects.filter(
+                Q(name__icontains=user_message) | Q(description__icontains=user_message)
+            )[:5]
+            
+            if products.exists():
+                db_context = "THÔNG TIN SẢN PHẨM TỪ HỆ THỐNG ĐANG BÁN:\n"
+                for p in products:
+                    # Chỉnh sửa lại các thuộc tính (name, price...) cho đúng với model Product của bạn
+                    db_context += f"- Sản phẩm: {p.name} | Giá: {p.price} VNĐ\n"
+            else:
+                db_context = "Hệ thống không tìm thấy sản phẩm nào khớp với từ khóa này."
+        except Exception as e:
+            db_context = "Dữ liệu sản phẩm tạm thời không truy xuất được."
+
+        # 2. NHỒI NGỮ CẢNH VÀO CHO AI (PROMPT)
+        system_instruction = (
+            "Bạn là 'E-Com Assistant', trợ lý ảo thông minh của sàn thương mại điện tử C2C. "
+            "Nhiệm vụ của bạn là tư vấn cho khách hàng một cách lịch sự, thân thiện, ngắn gọn và hữu ích. "
+            f"\n\n{db_context}\n\n"
+            "QUY TẮC: Nếu khách hỏi về sản phẩm, hãy dựa CHÍNH XÁC vào dữ liệu hệ thống cung cấp ở trên để trả lời. "
+            "Tuyệt đối không tự bịa ra sản phẩm hoặc giá tiền không có trong hệ thống."
+        )
+
+        # 3. KẾT NỐI GEMINI VÀ LẤY CÂU TRẢ LỜI
+        try:
+            gemini_api_key = os.environ.get('GEMINI_API_KEY')
+            if not gemini_api_key:
+                return Response({"error": "Thiếu API Key trên Server!"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+            genai.configure(api_key=gemini_api_key)
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            
+            # Ghép lệnh hệ thống và câu hỏi của khách
+            full_prompt = f"{system_instruction}\n\nKhách hàng hỏi: {user_message}"
+            response = model.generate_content(full_prompt)
+            
+            return Response({
+                "reply": response.text,
+                "bot_name": "E-Com Assistant"
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response({"error": f"Lỗi gọi Gemini AI: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 # 1. Quản lý Sản phẩm (Xem, Thêm, Sửa, Xóa)
 
 class ProductPagination(PageNumberPagination):
