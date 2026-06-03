@@ -378,77 +378,74 @@ class SystemChatBotView(APIView):
     """API Trợ lý ảo AI - Đọc Database và trả lời khách hàng"""
     def post(self, request):
         user_message = request.data.get('message', '').strip()
+        # Hứng "trí nhớ" từ Flutter gửi lên
+        previous_message = request.data.get('previous_message', '').strip()
         
         if not user_message:
             return Response({"error": "Vui lòng nhập câu hỏi!"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 1. TÌM KIẾM DỮ LIỆU TỪ DATABASE
         db_context = ""
         try:
-            words = user_message.split()
-            # Bổ sung thêm các từ thừa thường gặp
-            stop_words = ['tôi', 'muốn', 'mua', 'tìm', 'có', 'bán', 'không', 'cho', 'hỏi', 'về', 'nào', 'ạ', 'nhé', 'cái', 'những', 'một', 'chiếc', 'loại']
+            # 1. GỘP CHUNG 2 CÂU HỎI ĐỂ LẤY TỪ KHÓA (Ví dụ: "macbook air" + "sản phẩm này bán bao nhiêu cái")
+            search_text = f"{previous_message} {user_message}"
+            words = search_text.split()
             
-            # Lọc ra các từ khóa "tinh hoa"
+            # Thêm các từ cấm liên quan đến số lượng để lọc cho sạch
+            stop_words = ['tôi', 'muốn', 'mua', 'tìm', 'có', 'bán', 'không', 'cho', 'hỏi', 'về', 'nào', 'ạ', 'nhé', 'cái', 'những', 'một', 'chiếc', 'loại', 'này', 'đó', 'bao', 'nhiêu', 'rồi', 'đã']
+            
             core_words = [w for w in words if len(w) > 2 and w.lower() not in stop_words]
-            clean_phrase = " ".join(core_words) # Ví dụ: gộp lại thành "macbook air"
+            clean_phrase = " ".join(core_words)
             
             products = Product.objects.none()
             
             if clean_phrase:
-                # 🥇 LƯỚI LỌC 1: Tìm CHÍNH XÁC cụm từ (Exact Match)
                 products = Product.objects.filter(
                     Q(name__icontains=clean_phrase) | Q(description__icontains=clean_phrase)
                 ).distinct()[:5]
             
             if not products.exists() and core_words:
-                # 🥈 LƯỚI LỌC 2: Nếu không có cụm từ chính xác, tìm theo kiểu AND (Bắt buộc chứa TẤT CẢ các từ)
                 and_query = Q()
                 for word in core_words:
                     word_query = Q(name__icontains=word) | Q(description__icontains=word)
                     if not and_query:
                         and_query = word_query
                     else:
-                        and_query &= word_query # 👈 Đổi từ |= (OR) sang &= (AND)
+                        and_query &= word_query 
                 
                 products = Product.objects.filter(and_query).distinct()[:5]
 
-            # Ráp dữ liệu gửi cho AI
             if products.exists():
                 db_context = "THÔNG TIN SẢN PHẨM TỪ HỆ THỐNG ĐANG BÁN:\n"
                 for p in products:
-                    db_context += f"- Sản phẩm: {p.name} | Giá: {p.price} VNĐ\n"
+                    # 👉 LẤY SỐ LƯỢNG ĐÃ BÁN (Tự động thích ứng với tên cột của bạn)
+                    sold_qty = getattr(p, 'sold', getattr(p, 'sold_count', getattr(p, 'sold_quantity', 0)))
+                    db_context += f"- Sản phẩm: {p.name} | Giá: {p.price} VNĐ | Đã bán: {sold_qty} cái\n"
             else:
-                db_context = "Hệ thống không tìm thấy sản phẩm nào khớp với từ khóa này."
+                db_context = "Hệ thống không tìm thấy sản phẩm nào khớp với từ khóa."
                 
-            print(f"✅ [DEBUG DB SUCCESS]: \n{db_context}")
-            
         except Exception as e:
             db_context = "Dữ liệu sản phẩm tạm thời không truy xuất được."
-            print(f"❌ [DEBUG DB ERROR]: {str(e)}")
 
-        # 2. NHỒI NGỮ CẢNH VÀO CHO AI (PROMPT)
+        # 2. PROMPT AI ĐÃ CÓ TRÍ NHỚ
         system_instruction = (
             "Bạn là 'E-Com Assistant', trợ lý ảo thông minh của sàn thương mại điện tử C2C. "
             "Nhiệm vụ của bạn là tư vấn cho khách hàng một cách lịch sự, thân thiện, ngắn gọn và hữu ích. "
             f"\n\n{db_context}\n\n"
-            "QUY TẮC: Nếu khách hỏi về sản phẩm, hãy dựa CHÍNH XÁC vào dữ liệu hệ thống cung cấp ở trên để trả lời. "
-            "Tuyệt đối không tự bịa ra sản phẩm hoặc giá tiền không có trong hệ thống."
+            "QUY TẮC: Hãy dựa CHÍNH XÁC vào dữ liệu hệ thống cung cấp ở trên để trả lời. Tuyệt đối không tự bịa ra thông tin."
         )
 
-        print(f"🤖 [DEBUG AI PROMPT]: \n{system_instruction}")
-
-        # 3. KẾT NỐI GEMINI VÀ LẤY CÂU TRẢ LỜI
         try:
             gemini_api_key = os.environ.get('GEMINI_API_KEY')
-            if not gemini_api_key:
-                return Response({"error": "Thiếu API Key trên Server!"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
             genai.configure(api_key=gemini_api_key)
             model = genai.GenerativeModel('gemini-2.5-flash')
             
-            # Ghép lệnh hệ thống và câu hỏi của khách
-            full_prompt = f"{system_instruction}\n\nKhách hàng hỏi: {user_message}"
+            # Gửi cho AI xem cả câu hỏi cũ lẫn câu hỏi mới để nó hiểu chữ "này" là gì
+            full_prompt = (
+                f"{system_instruction}\n\n"
+                f"Lịch sử khách vừa hỏi: {previous_message}\n"
+                f"Câu hỏi hiện tại: {user_message}"
+            )
+            
             response = model.generate_content(full_prompt)
             
             return Response({
