@@ -416,7 +416,7 @@ class SystemChatBotView(APIView):
                 return Response({"error": "Thiếu API Key trên Server!"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
             genai.configure(api_key=gemini_api_key)
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            model = genai.GenerativeModel('gemini-pro')
             
             # Ghép lệnh hệ thống và câu hỏi của khách
             full_prompt = f"{system_instruction}\n\nKhách hàng hỏi: {user_message}"
