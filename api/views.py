@@ -385,15 +385,29 @@ class SystemChatBotView(APIView):
         # 1. TÌM KIẾM DỮ LIỆU TỪ DATABASE
         db_context = ""
         try:
-            # Tìm 5 sản phẩm có tên hoặc mô tả khớp với câu hỏi của khách
-            products = Product.objects.filter(
-                Q(name__icontains=user_message) | Q(description__icontains=user_message)
-            )[:5]
+            # A. Bóc tách câu hỏi thành các từ đơn (Ví dụ: "tôi muốn mua MacBook" -> ["tôi", "muốn", "mua", "MacBook"])
+            words = user_message.split()
+            
+            # B. Khai báo danh sách các "Từ cấm" (Stop-words) thường xuất hiện nhưng vô nghĩa trong tìm kiếm
+            stop_words = ['tôi', 'muốn', 'mua', 'tìm', 'có', 'bán', 'không', 'cho', 'hỏi', 'về', 'nào', 'ạ', 'nhé', 'cái', 'những']
+            
+            # C. Tạo bộ lọc linh hoạt
+            query = Q()
+            for word in words:
+                # Chỉ lấy những từ dài hơn 2 ký tự và không nằm trong danh sách từ cấm
+                if len(word) > 2 and word.lower() not in stop_words:
+                    query |= Q(name__icontains=word) | Q(description__icontains=word)
+            
+            # D. Phương án dự phòng: Nếu câu hỏi không trích xuất được từ nào (ví dụ khách gõ toàn từ cấm), thì bê nguyên câu đi tìm
+            if not query:
+                query = Q(name__icontains=user_message) | Q(description__icontains=user_message)
+
+            # E. Truy vấn Database với từ khóa đã lọc (dùng distinct để tránh trùng lặp)
+            products = Product.objects.filter(query).distinct()[:5]
             
             if products.exists():
                 db_context = "THÔNG TIN SẢN PHẨM TỪ HỆ THỐNG ĐANG BÁN:\n"
                 for p in products:
-                    # Chỉnh sửa lại các thuộc tính (name, price...) cho đúng với model Product của bạn
                     db_context += f"- Sản phẩm: {p.name} | Giá: {p.price} VNĐ\n"
             else:
                 db_context = "Hệ thống không tìm thấy sản phẩm nào khớp với từ khóa này."
