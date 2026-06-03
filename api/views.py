@@ -385,39 +385,47 @@ class SystemChatBotView(APIView):
         # 1. TÌM KIẾM DỮ LIỆU TỪ DATABASE
         db_context = ""
         try:
-            # A. Bóc tách câu hỏi thành các từ đơn (Ví dụ: "tôi muốn mua MacBook" -> ["tôi", "muốn", "mua", "MacBook"])
             words = user_message.split()
+            # Bổ sung thêm các từ thừa thường gặp
+            stop_words = ['tôi', 'muốn', 'mua', 'tìm', 'có', 'bán', 'không', 'cho', 'hỏi', 'về', 'nào', 'ạ', 'nhé', 'cái', 'những', 'một', 'chiếc', 'loại']
             
-            # B. Khai báo danh sách các "Từ cấm" (Stop-words) thường xuất hiện nhưng vô nghĩa trong tìm kiếm
-            stop_words = ['tôi', 'muốn', 'mua', 'tìm', 'có', 'bán', 'không', 'cho', 'hỏi', 'về', 'nào', 'ạ', 'nhé', 'cái', 'những']
+            # Lọc ra các từ khóa "tinh hoa"
+            core_words = [w for w in words if len(w) > 2 and w.lower() not in stop_words]
+            clean_phrase = " ".join(core_words) # Ví dụ: gộp lại thành "macbook air"
             
-            # C. Tạo bộ lọc linh hoạt
-            query = Q()
-            for word in words:
-                # Chỉ lấy những từ dài hơn 2 ký tự và không nằm trong danh sách từ cấm
-                if len(word) > 2 and word.lower() not in stop_words:
-                    query |= Q(name__icontains=word) | Q(description__icontains=word)
+            products = Product.objects.none()
             
-            # D. Phương án dự phòng: Nếu câu hỏi không trích xuất được từ nào (ví dụ khách gõ toàn từ cấm), thì bê nguyên câu đi tìm
-            if not query:
-                query = Q(name__icontains=user_message) | Q(description__icontains=user_message)
+            if clean_phrase:
+                # 🥇 LƯỚI LỌC 1: Tìm CHÍNH XÁC cụm từ (Exact Match)
+                products = Product.objects.filter(
+                    Q(name__icontains=clean_phrase) | Q(description__icontains=clean_phrase)
+                ).distinct()[:5]
+            
+            if not products.exists() and core_words:
+                # 🥈 LƯỚI LỌC 2: Nếu không có cụm từ chính xác, tìm theo kiểu AND (Bắt buộc chứa TẤT CẢ các từ)
+                and_query = Q()
+                for word in core_words:
+                    word_query = Q(name__icontains=word) | Q(description__icontains=word)
+                    if not and_query:
+                        and_query = word_query
+                    else:
+                        and_query &= word_query # 👈 Đổi từ |= (OR) sang &= (AND)
+                
+                products = Product.objects.filter(and_query).distinct()[:5]
 
-            # E. Truy vấn Database với từ khóa đã lọc (dùng distinct để tránh trùng lặp)
-            products = Product.objects.filter(query).distinct()[:5]
-            
+            # Ráp dữ liệu gửi cho AI
             if products.exists():
                 db_context = "THÔNG TIN SẢN PHẨM TỪ HỆ THỐNG ĐANG BÁN:\n"
                 for p in products:
                     db_context += f"- Sản phẩm: {p.name} | Giá: {p.price} VNĐ\n"
             else:
                 db_context = "Hệ thống không tìm thấy sản phẩm nào khớp với từ khóa này."
-
-            print(f"✅ [DEBUG DB SUCCESS]: {db_context}")
-
+                
+            print(f"✅ [DEBUG DB SUCCESS]: \n{db_context}")
+            
         except Exception as e:
             db_context = "Dữ liệu sản phẩm tạm thời không truy xuất được."
-
-            print(f"❌ [DEBUG DB ERROR]: Lỗi truy vấn Database - {str(e)}")
+            print(f"❌ [DEBUG DB ERROR]: {str(e)}")
 
         # 2. NHỒI NGỮ CẢNH VÀO CHO AI (PROMPT)
         system_instruction = (
