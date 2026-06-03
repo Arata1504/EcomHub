@@ -411,8 +411,13 @@ class SystemChatBotView(APIView):
                     db_context += f"- Sản phẩm: {p.name} | Giá: {p.price} VNĐ\n"
             else:
                 db_context = "Hệ thống không tìm thấy sản phẩm nào khớp với từ khóa này."
+
+            print(f"✅ [DEBUG DB SUCCESS]: {db_context}")
+
         except Exception as e:
             db_context = "Dữ liệu sản phẩm tạm thời không truy xuất được."
+
+            print(f"❌ [DEBUG DB ERROR]: Lỗi truy vấn Database - {str(e)}")
 
         # 2. NHỒI NGỮ CẢNH VÀO CHO AI (PROMPT)
         system_instruction = (
@@ -422,6 +427,8 @@ class SystemChatBotView(APIView):
             "QUY TẮC: Nếu khách hỏi về sản phẩm, hãy dựa CHÍNH XÁC vào dữ liệu hệ thống cung cấp ở trên để trả lời. "
             "Tuyệt đối không tự bịa ra sản phẩm hoặc giá tiền không có trong hệ thống."
         )
+
+        print(f"🤖 [DEBUG AI PROMPT]: \n{system_instruction}")
 
         # 3. KẾT NỐI GEMINI VÀ LẤY CÂU TRẢ LỜI
         try:
