@@ -396,6 +396,9 @@ class SystemChatBotView(APIView):
             
             # Viết 1 hàm nhỏ ẩn bên trong để tái sử dụng logic tìm kiếm
             def do_search(text):
+                for char in [',', '.', '?', '!', ';', ':']:
+                    text = text.replace(char, ' ')
+                    
                 words = text.split()
                 core_words = [w for w in words if len(w) > 2 and w.lower() not in stop_words]
                 phrase = " ".join(core_words)
