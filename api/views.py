@@ -19,7 +19,7 @@ from django.contrib.auth import authenticate
 from django.db import transaction
 from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
-from .models import Category, Chat, Message, OTPToken, Product, Order, OrderItem, ProductVariant, Review, ReviewImage, Store, CartItem
+from .models import Category, Chat, Message, OTPToken, Product, Order, OrderItem, ProductVariant, ProductImage, Review, ReviewImage, Store, CartItem
 from .serializers import CategorySerializer, ChatSerializer, MessageSerializer, ProductSerializer, OrderSerializer, ReviewSerializer, StoreSerializer, UserSerializer, CartItemSerializer
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
@@ -606,15 +606,33 @@ class ProductViewSet(viewsets.ModelViewSet):
 
     # Khi tạo sản phẩm, tự động gắn với Store của người dùng đó (nếu là Seller)
     def perform_create(self, serializer):
-        # Lấy cửa hàng đầu tiên thuộc về User này (thêm .first())
         store_instance = self.request.user.store.first() 
         
         if store_instance:
-            # Truyền đúng "một đối tượng cửa hàng" vào
-            serializer.save(store=store_instance)
-        else:
+            # Lưu các thông tin chữ (tên, giá...) vào bảng Product trước
+            product = serializer.save(store=store_instance)
             
+            # 👉 BẮT TAY XỬ LÝ ẢNH
+            images_data = self.request.FILES.getlist('images') # 'images' là tên key Flutter gửi lên
+            for image_data in images_data:
+                ProductImage.objects.create(product=product, image=image_data)
+        else:
             raise ValidationError({"error": "Bạn chưa có cửa hàng để thêm sản phẩm."})
+
+    # 2. XỬ LÝ KHI CHỦ SHOP BẤM NÚT "CẬP NHẬT SẢN PHẨM"
+    def perform_update(self, serializer):
+        # Cập nhật thông tin chữ trước
+        product = serializer.save()
+        
+        # Bắt lấy danh sách ảnh mới nếu có
+        images_data = self.request.FILES.getlist('images')
+        
+        if images_data:
+            # (Tùy chọn): Nếu bạn muốn quy tắc "Xóa sạch ảnh cũ khi tải ảnh mới lên" thì mở comment dòng bên dưới
+            # ProductImage.objects.filter(product=product).delete()
+            
+            for image_data in images_data:
+                ProductImage.objects.create(product=product, image=image_data)
 
 class OrderViewSet(viewsets.ModelViewSet):
     serializer_class = OrderSerializer
