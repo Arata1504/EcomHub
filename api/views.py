@@ -390,47 +390,46 @@ class SystemChatBotView(APIView):
         personal_context = ""
         try:
             # === PHẦN 1: TÌM KIẾM SẢN PHẨM  ===
-            # 1. GỘP CHUNG 2 CÂU HỎI ĐỂ LẤY TỪ KHÓA (Ví dụ: "macbook air" + "sản phẩm này bán bao nhiêu cái")
-            search_text = f"{previous_message} {user_message}"
-            words = search_text.split()
+            stop_words = ['tôi', 'muốn', 'mua', 'tìm', 'có', 'bán', 'không', 'cho', 'hỏi', 'về', 'nào', 'ạ', 'nhé', 'cái', 'những', 'một', 'chiếc', 'loại', 'này', 'đó', 'bao', 'nhiêu', 'rồi', 'đã', 'sản', 'phẩm', 'được', 'thì', 'là', 'nữa']
             
-            # Thêm các từ cấm liên quan đến số lượng để lọc cho sạch
-            stop_words = ['tôi', 'muốn', 'mua', 'tìm', 'có', 'bán', 'không', 'cho', 'hỏi', 'về', 'nào', 'ạ', 'nhé', 'cái', 'những', 'một', 'chiếc', 'loại', 'này', 'đó', 'bao', 'nhiêu', 'rồi', 'đã']
-            
-            core_words = [w for w in words if len(w) > 2 and w.lower() not in stop_words]
-            clean_phrase = " ".join(core_words)
-            
-            products = Product.objects.none()
-            
-            if clean_phrase:
-                # 🥇 LƯỚI LỌC 1: Tìm CHÍNH XÁC cụm từ
-                products = Product.objects.filter(
-                    Q(name__icontains=clean_phrase) | Q(description__icontains=clean_phrase)
-                ).distinct()[:20]
-            
-            if not products.exists() and core_words:
-                and_query = Q()
-                for word in core_words:
-                    word_query = Q(name__icontains=word) | Q(description__icontains=word)
-                    if not and_query:
-                        and_query = word_query
-                    else:
-                        and_query &= word_query 
+            # Viết 1 hàm nhỏ ẩn bên trong để tái sử dụng logic tìm kiếm
+            def do_search(text):
+                words = text.split()
+                core_words = [w for w in words if len(w) > 2 and w.lower() not in stop_words]
+                phrase = " ".join(core_words)
                 
-                products = Product.objects.filter(and_query).distinct()[:20]
+                res = Product.objects.none()
+                if phrase:
+                    res = Product.objects.filter(Q(name__icontains=phrase) | Q(description__icontains=phrase)).distinct()[:20]
+                
+                if not res.exists() and core_words:
+                    and_query = Q()
+                    for word in core_words:
+                        q = Q(name__icontains=word) | Q(description__icontains=word)
+                        if not and_query:
+                            and_query = q
+                        else:
+                            and_query &= q
+                    res = Product.objects.filter(and_query).distinct()[:20]
+                return res
 
+            # LƯỚI LỌC 1: Thử tìm kết hợp cả câu cũ và câu mới
+            search_text = f"{previous_message} {user_message}"
+            products = do_search(search_text)
+            
+            # LƯỚI LỌC 2 (CỨU CÁNH): Nếu câu mới làm hỏng kết quả, bỏ câu mới, chỉ tìm bằng câu cũ!
+            if not products.exists() and previous_message:
+                products = do_search(previous_message)
+
+            # Ráp dữ liệu gửi cho AI (Code cũ của bạn)
             if products.exists():
                 db_context = "THÔNG TIN CHI TIẾT CÁC SẢN PHẨM TRONG HỆ THỐNG:\n\n"
                 for p in products:
-                    # 1. Lấy các thông số cơ bản (Dùng getattr để chống lỗi sập web nếu thiếu cột)
                     sold_qty = getattr(p, 'sold', getattr(p, 'sold_count', getattr(p, 'sold_quantity', 0)))
                     stock_qty = getattr(p, 'stock', getattr(p, 'quantity', 'Không xác định'))
                     desc = getattr(p, 'description', getattr(p, 'detail', 'Không có mô tả'))
-                    
-                    # 2. Lấy tên danh mục (Nếu bạn có liên kết bảng Category)
                     category = p.category.name if hasattr(p, 'category') and p.category else 'Chưa phân loại'
 
-                    # 3. NHỒI TOÀN BỘ VÀO BẢN BÁO CÁO CHO AI ĐỌC
                     db_context += (
                         f"Tên sản phẩm: {p.name}\n"
                         f"- Giá bán: {p.price} VNĐ\n"
