@@ -392,7 +392,7 @@ class SystemChatBotView(APIView):
         personal_context = ""
         try:
             # === PHẦN 1: TÌM KIẾM SẢN PHẨM  ===
-            stop_words = ['tôi', 'muốn', 'mua', 'tìm', 'có', 'bán', 'không', 'cho', 'hỏi', 'về', 'nào', 'ạ', 'nhé', 'cái', 'những', 'một', 'chiếc', 'loại', 'này', 'đó', 'bao', 'nhiêu', 'rồi', 'đã', 'sản', 'phẩm', 'được', 'thì', 'là', 'nữa']
+            stop_words = ['tôi', 'muốn', 'mua', 'tìm', 'có', 'bán', 'không', 'cho', 'hỏi', 'về', 'nào', 'ạ', 'nhé', 'cái', 'những', 'một', 'chiếc', 'loại', 'này', 'đó', 'bao', 'nhiêu', 'rồi', 'đã', 'sản', 'phẩm', 'được', 'thì', 'là', 'nữa', 'đi', 'kèm', 'với', 'các', 'xin', 'chào', 'hi', 'hello', 'ơi']
             
             # Viết 1 hàm nhỏ ẩn bên trong để tái sử dụng logic tìm kiếm
             def do_search(text):
@@ -444,7 +444,11 @@ class SystemChatBotView(APIView):
                         f"--------------------------------------------------\n"
                     )
             else:
-                db_context = "Hệ thống không tìm thấy sản phẩm nào khớp với từ khóa."
+                db_context = (
+                    "GHI CHÚ HỆ THỐNG: Hiện tại không có sản phẩm nào khớp với từ khóa.\n"
+                    "LƯU Ý ĐẶC BIỆT DÀNH CHO AI: Nếu khách hàng chỉ đang chào hỏi (Xin chào, Hi, Hello...) "
+                    "thì bạn hãy chào lại thật thân thiện và tuyệt đối KHÔNG ĐƯỢC nhắc đến việc 'không tìm thấy sản phẩm'."
+                )
 
             # === PHẦN 2: LẤY LỊCH SỬ CÁ NHÂN (NẾU USER ĐÃ ĐĂNG NHẬP) ===
             if user.is_authenticated:
