@@ -420,6 +420,9 @@ class SystemChatBotView(APIView):
             products = do_search(search_text)
             
             # LƯỚI LỌC 2 (CỨU CÁNH): Nếu câu mới làm hỏng kết quả, bỏ câu mới, chỉ tìm bằng câu cũ!
+            if not products.exists() and user_message:
+                products = do_search(user_message)
+
             if not products.exists() and previous_message:
                 products = do_search(previous_message)
 
