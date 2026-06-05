@@ -380,6 +380,8 @@ class SystemChatBotView(APIView):
         user_message = request.data.get('message', '').strip()
         # Hứng "trí nhớ" từ Flutter gửi lên
         previous_message = request.data.get('previous_message', '').strip()
+
+        full_history = request.data.get('full_history', [])
         
         if not user_message:
             return Response({"error": "Vui lòng nhập câu hỏi!"}, status=status.HTTP_400_BAD_REQUEST)
@@ -452,7 +454,7 @@ class SystemChatBotView(APIView):
                     
                     # A. Lấy lịch sử mua hàng (Ví dụ: 20 đơn hàng gần nhất)
                     # Lưu ý: Đổi tên Model Order và các trường cho khớp với Database của bạn
-                    recent_orders = Order.objects.filter(buyer=user).order_by('-created_at')[:20]
+                    recent_orders = Order.objects.filter(user=user).order_by('-created_at')[:20]
                     if recent_orders.exists():
                         personal_context += "Lịch sử mua hàng:\n"
                         for order in recent_orders:
@@ -462,7 +464,7 @@ class SystemChatBotView(APIView):
 
                     # B. Lấy lịch sử nhắn tin với các cửa hàng
                     # Lưu ý: Đổi tên Model Message cho khớp
-                    recent_chats = ChatMessage.objects.filter(sender=user).values_list('receiver__shop_name', flat=True).distinct()
+                    recent_chats = Chat.objects.filter(customer=user).values_list('store__name', flat=True).distinct()
                     if recent_chats:
                         shops = ", ".join(recent_chats)
                         personal_context += f"Lịch sử nhắn tin: Khách hàng đã từng nhắn tin với các cửa hàng: {shops}.\n"
@@ -473,14 +475,21 @@ class SystemChatBotView(APIView):
             db_context = "Dữ liệu sản phẩm tạm thời không truy xuất được."
 
         # 2. PROMPT AI ĐÃ CÓ TRÍ NHỚ
+        history_text = ""
+        for msg in full_history:
+            role = "Khách hàng" if msg.get('role') == 'user' else "Trợ lý AI (Bạn)"
+            history_text += f"{role}: {msg.get('content')}\n"
+
         system_instruction = (
-            "Bạn là 'E-Com Assistant', chuyên gia tư vấn bán hàng cấp cao của sàn thương mại điện tử C2C. "
-            f"\n\n{db_context}"
-            f"\n\n{personal_context}\n\n" # Bơm thêm dữ liệu cá nhân vào đây
+            "Bạn là 'E-Com Assistant', chuyên gia tư vấn bán hàng cấp cao của sàn thương mại điện tử C2C.\n\n"
+            f"{db_context}\n\n"
+            "--- LỊCH SỬ TRÒ CHUYỆN TỪ ĐẦU ĐẾN NAY ---\n"
+            f"{history_text}\n"
+            "-----------------------------------------\n"
             "NHIỆM VỤ CỦA BẠN:\n"
-            "1. Nếu khách hỏi về sản phẩm, hãy dùng Thông tin sản phẩm để trả lời.\n"
-            "2. Nếu khách hỏi về lịch sử của họ (mua hàng, nhắn tin), hãy dùng 'Thông tin cá nhân' để giải đáp chính xác.\n"
-            "3. Trả lời lịch sự, thân thiện và xưng hô là 'bạn' hoặc 'anh/chị'."
+            "1. Đọc toàn bộ 'LỊCH SỬ TRÒ CHUYỆN' ở trên để hiểu ngữ cảnh khách hàng đang muốn gì, sản phẩm nào.\n"
+            "2. Dựa vào Thông tin hệ thống cung cấp để trả lời câu hỏi mới nhất một cách lịch sự, thân thiện.\n"
+            "3. TUYỆT ĐỐI KHÔNG tự bịa ra thông số hay giá tiền không có trong hệ thống.\n"
         )
 
         try:
@@ -488,12 +497,8 @@ class SystemChatBotView(APIView):
             genai.configure(api_key=gemini_api_key)
             model = genai.GenerativeModel('gemini-2.5-flash')
             
-            # Gửi cho AI xem cả câu hỏi cũ lẫn câu hỏi mới để nó hiểu chữ "này" là gì
-            full_prompt = (
-                f"{system_instruction}\n\n"
-                f"Lịch sử khách vừa hỏi: {previous_message}\n"
-                f"Câu hỏi hiện tại: {user_message}"
-            )
+            # Gửi lệnh cuối cùng
+            full_prompt = f"{system_instruction}\nCâu hỏi mới nhất của Khách hàng: {user_message}"
             
             response = model.generate_content(full_prompt)
             
@@ -503,7 +508,7 @@ class SystemChatBotView(APIView):
             }, status=status.HTTP_200_OK)
             
         except Exception as e:
-            return Response({"error": f"Lỗi gọi Gemini AI: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({"error": f"Lỗi gọi Gemini: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 # 1. Quản lý Sản phẩm (Xem, Thêm, Sửa, Xóa)
 
 class ProductPagination(PageNumberPagination):
