@@ -398,7 +398,7 @@ class SystemChatBotView(APIView):
             def do_search(text):
                 for char in [',', '.', '?', '!', ';', ':']:
                     text = text.replace(char, ' ')
-                    
+
                 words = text.split()
                 core_words = [w for w in words if len(w) > 2 and w.lower() not in stop_words]
                 phrase = " ".join(core_words)
@@ -512,19 +512,34 @@ class SystemChatBotView(APIView):
             genai.configure(api_key=gemini_api_key)
             model = genai.GenerativeModel('gemini-2.5-flash')
             
-            # Gửi lệnh cuối cùng
             full_prompt = f"{system_instruction}\nCâu hỏi mới nhất của Khách hàng: {user_message}"
-            
             response = model.generate_content(full_prompt)
             
             return Response({
                 "reply": response.text,
-                "bot_name": "E-Com Assistant",
-                "products": product_list_data
+                "bot_name": "E-Com Assistant"
             }, status=status.HTTP_200_OK)
             
         except Exception as e:
-            return Response({"error": f"Lỗi gọi Gemini: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            error_msg = str(e)
+            # 👉 NẾU LÀ LỖI 429 (QUÁ TẢI)
+            if "429" in error_msg or "exceeded" in error_msg.lower():
+                import re
+                # Dùng Regex để tìm con số giây bị khóa trong chuỗi lỗi của Google
+                match = re.search(r'retry in ([\d\.]+)s', error_msg)
+                if match:
+                    # Lấy số giây và làm tròn lên
+                    wait_time = int(float(match.group(1))) + 1 
+                    friendly_error = f"Dạ, trợ lý AI đang quá tải lượt hỏi do có nhiều người truy cập. Vui lòng chờ {wait_time} giây nữa rồi nhắn lại cho mình nhé!"
+                else:
+                    # Phương án dự phòng nếu Google đổi mẫu câu báo lỗi
+                    friendly_error = "Dạ, trợ lý AI đang bị kẹt mạng một chút. Vui lòng chờ khoảng 30 giây nữa rồi nhắn lại cho mình nhé!"
+                
+                return Response({"error": friendly_error}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+            
+            # Nếu là các lỗi sập server khác
+            return Response({"error": "Dạ, hệ thống đang bảo trì, bạn vui lòng thử lại sau nhé!"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 # 1. Quản lý Sản phẩm (Xem, Thêm, Sửa, Xóa)
 
 class ProductPagination(PageNumberPagination):
