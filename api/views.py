@@ -403,9 +403,10 @@ class SystemChatBotView(APIView):
             products = Product.objects.none()
             
             if clean_phrase:
+                # 🥇 LƯỚI LỌC 1: Tìm CHÍNH XÁC cụm từ
                 products = Product.objects.filter(
                     Q(name__icontains=clean_phrase) | Q(description__icontains=clean_phrase)
-                ).distinct()[:5]
+                ).distinct()[:20]
             
             if not products.exists() and core_words:
                 and_query = Q()
@@ -416,7 +417,7 @@ class SystemChatBotView(APIView):
                     else:
                         and_query &= word_query 
                 
-                products = Product.objects.filter(and_query).distinct()[:5]
+                products = Product.objects.filter(and_query).distinct()[:20]
 
             if products.exists():
                 db_context = "THÔNG TIN CHI TIẾT CÁC SẢN PHẨM TRONG HỆ THỐNG:\n\n"
@@ -450,9 +451,9 @@ class SystemChatBotView(APIView):
                 if is_asking_personal:
                     personal_context = "\n--- THÔNG TIN CÁ NHÂN CỦA KHÁCH HÀNG (CHỈ DÙNG KHI ĐƯỢC HỎI) ---\n"
                     
-                    # A. Lấy lịch sử mua hàng (Ví dụ: 5 đơn hàng gần nhất)
+                    # A. Lấy lịch sử mua hàng (Ví dụ: 20 đơn hàng gần nhất)
                     # Lưu ý: Đổi tên Model Order và các trường cho khớp với Database của bạn
-                    recent_orders = Order.objects.filter(buyer=user).order_by('-created_at')[:5]
+                    recent_orders = Order.objects.filter(buyer=user).order_by('-created_at')[:20]
                     if recent_orders.exists():
                         personal_context += "Lịch sử mua hàng:\n"
                         for order in recent_orders:
@@ -462,7 +463,7 @@ class SystemChatBotView(APIView):
 
                     # B. Lấy lịch sử nhắn tin với các cửa hàng
                     # Lưu ý: Đổi tên Model Message cho khớp
-                    recent_chats = Chat.objects.filter(sender=user).values_list('receiver__shop_name', flat=True).distinct()
+                    recent_chats = ChatMessage.objects.filter(sender=user).values_list('receiver__shop_name', flat=True).distinct()
                     if recent_chats:
                         shops = ", ".join(recent_chats)
                         personal_context += f"Lịch sử nhắn tin: Khách hàng đã từng nhắn tin với các cửa hàng: {shops}.\n"
@@ -475,13 +476,12 @@ class SystemChatBotView(APIView):
         # 2. PROMPT AI ĐÃ CÓ TRÍ NHỚ
         system_instruction = (
             "Bạn là 'E-Com Assistant', chuyên gia tư vấn bán hàng cấp cao của sàn thương mại điện tử C2C. "
-            "Bạn đang được cung cấp quyền truy cập vào Database chi tiết của các sản phẩm. "
-            f"\n\n{db_context}\n\n"
+            f"\n\n{db_context}"
+            f"\n\n{personal_context}\n\n" # Bơm thêm dữ liệu cá nhân vào đây
             "NHIỆM VỤ CỦA BẠN:\n"
-            "1. Lắng nghe nhu cầu của khách hàng.\n"
-            "2. Đọc thật kỹ phần 'Mô tả chi tiết & Thông số kỹ thuật' của sản phẩm tôi vừa cung cấp ở trên để tư vấn sâu về công năng, chất liệu, xuất xứ (nếu có).\n"
-            "3. Trả lời một cách tự nhiên, thuyết phục như một người bán hàng chuyên nghiệp, không trả lời cụt lủn.\n"
-            "4. TUYỆT ĐỐI KHÔNG bịa đặt ra các thông số, tính năng hay giá tiền không có trong đoạn dữ liệu trên."
+            "1. Nếu khách hỏi về sản phẩm, hãy dùng Thông tin sản phẩm để trả lời.\n"
+            "2. Nếu khách hỏi về lịch sử của họ (mua hàng, nhắn tin), hãy dùng 'Thông tin cá nhân' để giải đáp chính xác.\n"
+            "3. Trả lời lịch sự, thân thiện và xưng hô là 'bạn' hoặc 'anh/chị'."
         )
 
         try:
