@@ -480,6 +480,11 @@ class SystemChatBotView(APIView):
                 
         except Exception as e:
             db_context = "Dữ liệu sản phẩm tạm thời không truy xuất được."
+        
+        product_list_data = []
+        if 'products' in locals() and products.exists():
+            # Sử dụng ProductSerializer có sẵn của bạn để biến DB thành JSON
+            product_list_data = ProductSerializer(products[:5], many=True, context={'request': request}).data
 
         # 2. PROMPT AI ĐÃ CÓ TRÍ NHỚ
         history_text = ""
@@ -511,7 +516,8 @@ class SystemChatBotView(APIView):
             
             return Response({
                 "reply": response.text,
-                "bot_name": "E-Com Assistant"
+                "bot_name": "E-Com Assistant",
+                "products": product_list_data
             }, status=status.HTTP_200_OK)
             
         except Exception as e:
