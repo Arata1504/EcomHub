@@ -652,127 +652,92 @@ class OrderViewSet(viewsets.ModelViewSet):
                 return Order.objects.none()
         return Order.objects.filter(user=user).order_by('-created_at')
     
+    @transaction.atomic 
     def create(self, request, *args, **kwargs):
+        user = request.user
         data = request.data
-        items_data = data.get('items', [])
         
-        try:
-            shipping_fee = Decimal(str(data.get('shipping_fee', 0)))
-        except Exception:
-            shipping_fee = Decimal('0')
+        cart_items = data.get('items', [])
+        shipping_address = data.get('shipping_address', '')
+        shipping_fee = float(data.get('shipping_fee', 0))
+        voucher_ids = data.get('voucher_ids', []) 
+        
+        if not cart_items:
+            return Response({"error": "Giỏ hàng trống!"}, status=status.HTTP_400_BAD_REQUEST)
 
-        if not items_data:
-            return Response({'error': 'Giỏ hàng trống'}, status=400)
-
-        try:
-            # BẮT ĐẦU VÒNG BẢO VỆ GIAO DỊCH
-            with transaction.atomic(): 
-                total_amount = shipping_fee
-                order_items_to_create = []
+        subtotal = 0
+        order_items_data = []
+        
+        for item in cart_items:
+            try:
+                product = Product.objects.get(id=item['product_id'])
+                quantity = item.get('quantity', 1)
                 
-                for item in items_data:
-                    try:
-                        qty = int(item.get('quantity', 0))
-                        if qty <= 0:
-                            raise Exception('Số lượng sản phẩm không hợp lệ!')
-                    except ValueError:
-                        raise Exception('Số lượng phải là số nguyên!')
-                    
-                    variant_str = item.get('variant', '')
-                    product_id = item['product_id']
+                
+                price = float(product.price)
+                subtotal += price * quantity
+                
+                order_items_data.append({
+                    'product': product,
+                    'quantity': quantity,
+                    'price': price,
+                    'variant': item.get('variant', '')
+                })
+            except Product.DoesNotExist:
+                return Response({"error": f"Sản phẩm ID {item['product_id']} không tồn tại."}, status=status.HTTP_400_BAD_REQUEST)
 
-                    # 1. KHÓA DÒNG SẢN PHẨM GỐC 
-                    # Phải khóa sản phẩm gốc trước để các user xếp hàng đợi nhau
-                    product = Product.objects.select_for_update().get(id=product_id)
-                    actual_price = product.price
-
-                    # ==========================================
-                    # 2. XỬ LÝ NẾU CÓ BIẾN THỂ (MÀU/SIZE)
-                    # ==========================================
-                    if variant_str and variant_str != 'Mặc định':
-                        parts = variant_str.split(',')
-                        selected_attrs = {p.split(':')[0].strip(): p.split(':')[1].strip() for p in parts if ':' in p}
-                        
-                        variant_found = False
-                        
-                        # Khóa tất cả biến thể của sản phẩm này
-                        for v in product.variants.select_for_update().all():
-                            v_attrs = {av.attribute.name.strip(): av.value.strip() for av in v.attribute_values.all()}
-                            
-                            if v_attrs == selected_attrs:
-                                variant_found = True
-                                
-                                # 👉 KIỂM TRA KHO BIẾN THỂ VÀ NÉM LỖI THẲNG TAY
-                                if v.stock < qty:
-                                    raise Exception(f'Rất tiếc, phân loại "{variant_str}" đã hết hàng hoặc có người mua mất!')
-                                
-                                # Trừ kho biến thể
-                                v.stock -= qty 
-                                v.save()
-                                actual_price = v.price 
-                                break
-                                
-                        if not variant_found:
-                            raise Exception(f'Không tìm thấy phân loại "{variant_str}"')
-                            
-                        # Vẫn phải trừ tồn kho tổng của sản phẩm gốc (Vì kho tổng = tổng các kho biến thể)
-                        if product.stock < qty:
-                            raise Exception(f'Sản phẩm "{product.name}" đã hết hàng!')
-                        product.stock -= qty
-                        product.sold_count += qty
-                        product.save()
-
-                    # ==========================================
-                    # 3. XỬ LÝ SẢN PHẨM KHÔNG BIẾN THỂ
-                    # ==========================================
-                    else:
-                        if product.stock < qty:
-                            raise Exception(f'Sản phẩm "{product.name}" đã hết hàng hoặc có người mua mất!')
-                        
-                        # Trừ kho sản phẩm gốc
-                        product.stock -= qty
-                        product.sold_count += qty
-                        product.save()
-
-                    # Cộng tiền vào tổng bill
-                    total_amount += actual_price * qty
-                    
-                    # Gom dữ liệu để chuẩn bị tạo OrderItem
-                    order_items_to_create.append({
-                        'product': product,
-                        'quantity': qty,
-                        'price': actual_price,
-                        'variant': variant_str  
-                    })
-
-                # XONG BƯỚC TRỪ KHO AN TOÀN -> BẮT ĐẦU LƯU ĐƠN HÀNG
-                order = Order.objects.create(
-                    user=request.user,
-                    total_amount=total_amount,
-                    address=data.get('shipping_address', ''),
-                    status='pending'
-                )
-
-                for item_data in order_items_to_create:
-                    OrderItem.objects.create(
-                        order=order,
-                        product=item_data['product'],
-                        quantity=item_data['quantity'],
-                        price=item_data['price'],
-                        variant=item_data['variant']
-                    )
-
-            # Lấy lại dữ liệu đơn hàng để format json trả về app
-            order_refresh = Order.objects.get(id=order.id)
-            serializer = self.get_serializer(order_refresh)
+        total_discount = 0
+        applied_vouchers = []
+        
+        if voucher_ids:
+            now = timezone.now()
+            valid_vouchers = Voucher.objects.filter(
+                id__in=voucher_ids,
+                is_active=True,
+                start_date__lte=now,
+                end_date__gte=now,
+                used_count__lt=F('usage_limit')
+            )
             
-            return Response(serializer.data, status=201)
+            for voucher in valid_vouchers:
+                if subtotal >= float(voucher.min_order_value):
+                    discount = 0
+                    if voucher.discount_type == 'percent':
+                        discount = subtotal * (float(voucher.discount_value) / 100)
+                        if voucher.max_discount and discount > float(voucher.max_discount):
+                            discount = float(voucher.max_discount)
+                    else:
+                        discount = float(voucher.discount_value)
+                    
+                    total_discount += discount
+                    applied_vouchers.append(voucher)
 
-        except Product.DoesNotExist:
-            return Response({'error': 'Một hoặc nhiều sản phẩm không tồn tại'}, status=404)
-        except Exception as e:
-            # 👉 Ném chính xác key 'error' để Flutter hiện Dialog
-            return Response({'error': str(e)}, status=400)
+        final_total = (subtotal + shipping_fee) - total_discount
+        if final_total < 0:
+            final_total = 0 
+
+        order = Order.objects.create(
+            user=user,
+            total_amount=final_total,
+            address=shipping_address,
+            status='pending',
+            
+        )
+        
+        for item_data in order_items_data:
+            OrderItem.objects.create(
+                order=order,
+                product=item_data['product'],
+                quantity=item_data['quantity'],
+                price=item_data['price'],
+                variant=item_data['variant']
+            )
+
+        for voucher in applied_vouchers:
+            voucher.used_count = F('used_count') + 1
+            voucher.save(update_fields=['used_count'])
+
+        return Response({"message": "Đặt hàng thành công!", "order_id": order.id}, status=status.HTTP_201_CREATED)
         
     def partial_update(self, request, *args, **kwargs):
         # Lấy đơn hàng hiện tại trong DB
