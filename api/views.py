@@ -9,7 +9,7 @@ from decimal import Decimal
 from django.contrib.auth import get_user_model
 import requests
 from rest_framework.exceptions import ValidationError
-from rest_framework import viewsets, status, generics, permissions
+from rest_framework import viewsets, status, generics, permissions, PermissionDenied
 from rest_framework.response import Response
 from rest_framework.decorators import action, api_view, parser_classes, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -700,14 +700,29 @@ class OrderViewSet(viewsets.ModelViewSet):
             )
             
             for voucher in valid_vouchers:
-                if subtotal >= float(voucher.min_order_value):
+                eligible_subtotal = 0
+                
+                # A. TÍNH TỔNG TIỀN HỢP LỆ CHO VOUCHER NÀY
+                if voucher.store is None:
+                    # Mã Hệ thống: Áp dụng cho toàn bộ tiền hàng
+                    eligible_subtotal = subtotal 
+                else:
+                    # Mã của Shop: Chỉ cộng tiền các món hàng thuộc Shop đó
+                    for item_data in order_items_data:
+                        if item_data['product'].store_id == voucher.store_id:
+                            eligible_subtotal += item_data['price'] * item_data['quantity']
+
+                # B. ÁP DỤNG GIẢM GIÁ TRÊN SỐ TIỀN HỢP LỆ (ĐÃ KIỂM TRA ĐƠN TỐI THIỂU & MAX DISCOUNT)
+                if eligible_subtotal >= float(voucher.min_order_value):
                     discount = 0
                     if voucher.discount_type == 'percent':
-                        discount = subtotal * (float(voucher.discount_value) / 100)
+                        discount = eligible_subtotal * (float(voucher.discount_value) / 100)
+                        # Cắt ngọn nếu vượt Max Discount
                         if voucher.max_discount and discount > float(voucher.max_discount):
                             discount = float(voucher.max_discount)
                     else:
-                        discount = float(voucher.discount_value)
+                        # Giảm thẳng: Không được giảm lố qua số tiền món hàng
+                        discount = min(float(voucher.discount_value), eligible_subtotal)
                     
                     total_discount += discount
                     applied_vouchers.append(voucher)

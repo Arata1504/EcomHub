@@ -10,7 +10,7 @@ from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 # Import đầy đủ các Model (Đã loại bỏ CartItem theo yêu cầu)
 from .models import (
     Review, ReviewImage, User, Store, Product, Order, OrderItem,
-    ProductImage, ProductVariant, Attribute, AttributeValue
+    ProductImage, ProductVariant, Attribute, AttributeValue, Voucher
 )
 
 # ==========================================
@@ -148,6 +148,12 @@ class ReviewAdmin(admin.ModelAdmin):
     def has_change_permission(self, request, obj=None):
         return False
 
+@admin.register(Voucher)
+class VoucherAdmin(admin.ModelAdmin):
+    list_display = ('code', 'name', 'store', 'discount_type', 'discount_value', 'is_active')
+    search_fields = ('code', 'name')
+    list_filter = ('is_active', 'discount_type')
+    
 # Đăng ký 2 bảng quản lý thuộc tính động dùng chung cho hệ thống
 admin.site.register(Attribute)
 admin.site.register(AttributeValue)
