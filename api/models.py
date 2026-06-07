@@ -4,7 +4,6 @@ from django.utils import timezone
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 
-# 1. Bảng User
 class User(AbstractUser):
     first_name = None
     last_name = None
@@ -33,7 +32,6 @@ class User(AbstractUser):
             
         super().save(*args, **kwargs)
 
-# 2. Bảng Store
 class Store(models.Model):
     # Dùng ForeignKey để liên kết với User (ownerId)
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='store')
@@ -73,7 +71,6 @@ class Category(models.Model):
     def __str__(self):
         return self.name
 
-# 3. Bảng Product
 class Product(models.Model):
     store = models.ForeignKey(Store, on_delete=models.CASCADE, related_name='products')
     name = models.CharField(max_length=255)
@@ -105,7 +102,6 @@ class Attribute(models.Model):
     def __str__(self):
         return self.name
 
-# Bảng lưu Giá trị thuộc tính
 class AttributeValue(models.Model):
     attribute = models.ForeignKey(Attribute, related_name='values', on_delete=models.CASCADE)
     value = models.CharField(max_length=100)
@@ -113,7 +109,6 @@ class AttributeValue(models.Model):
     def __str__(self):
         return f"{self.attribute.name}: {self.value}"
 
-# Bảng Biến thể (SKU) - Lưu giá và tồn kho riêng cho từng sự kết hợp
 class ProductVariant(models.Model):
     product = models.ForeignKey(Product, related_name='variants', on_delete=models.CASCADE)
     price = models.DecimalField(max_digits=12, decimal_places=2) # Hoặc IntegerField tùy bạn
@@ -125,7 +120,6 @@ class ProductVariant(models.Model):
     def __str__(self):
         return f"{self.product.name} - {self.price}VND"
 
-# 4. Bảng Cart (Giỏ hàng tạm thời)
 class CartItem(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='cart_items')
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
@@ -133,7 +127,6 @@ class CartItem(models.Model):
     variant = models.CharField(max_length=255, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
-# 5. Bảng Order (Đơn hàng tổng)
 class Order(models.Model):
     STATUS_CHOICES = (
         ('pending', 'Chờ xác nhận'),
@@ -147,7 +140,6 @@ class Order(models.Model):
     address = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
 
-# 6. Bảng OrderItem (Chi tiết từng món trong đơn hàng) - QUAN TRỌNG
 class OrderItem(models.Model):
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='items')
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
@@ -158,7 +150,6 @@ class OrderItem(models.Model):
     def __str__(self):
         return f"{self.quantity} x {self.product.name}"
     
-# Bảng lưu Đánh giá chính
 class Review(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='reviews')
     user = models.ForeignKey(User, on_delete=models.CASCADE)
@@ -170,7 +161,6 @@ class Review(models.Model):
     class Meta:
         ordering = ['-created_at'] # Đánh giá mới nhất sẽ tự động lên đầu
 
-# Bảng lưu Hình ảnh đính kèm (Vì 1 đánh giá khách có thể up nhiều ảnh)
 class ReviewImage(models.Model):
     review = models.ForeignKey(Review, on_delete=models.CASCADE, related_name='images')
     image = models.ImageField(upload_to='reviews/images/')    
@@ -220,3 +210,44 @@ class OTPToken(models.Model):
 
     def __str__(self):
         return f"OTP của {self.email} - {self.otp_code}"
+    
+class Voucher(models.Model):
+    DISCOUNT_TYPES = (
+        ('fixed', 'Giảm số tiền cố định'),
+        ('percent', 'Giảm theo phần trăm'),
+        ('shipping', 'Miễn phí vận chuyển'),
+    )
+
+    # Thông tin cơ bản
+    code = models.CharField(max_length=50, unique=True, verbose_name="Mã giảm giá")
+    name = models.CharField(max_length=255, verbose_name="Tên chương trình")
+    
+    # store = null có nghĩa là mã của Toàn sàn (ví dụ: Freeship). Có giá trị = mã của riêng Shop đó.
+    store = models.ForeignKey('Store', on_delete=models.CASCADE, null=True, blank=True, related_name='vouchers')
+    
+    # Thiết lập giảm giá
+    discount_type = models.CharField(max_length=20, choices=DISCOUNT_TYPES, default='fixed')
+    discount_value = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Mức giảm (VNĐ hoặc %)")
+    min_order_value = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="Đơn tối thiểu")
+    max_discount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="Giảm tối đa (Dành cho mã %)")
+    
+    # Giới hạn sử dụng
+    usage_limit = models.IntegerField(default=100, verbose_name="Tổng số lượt dùng")
+    used_count = models.IntegerField(default=0, verbose_name="Đã dùng")
+    
+    # Thời gian
+    start_date = models.DateTimeField(default=timezone.now)
+    end_date = models.DateTimeField()
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"{self.code} - {self.name}"
+
+    # Hàm kiểm tra mã còn hiệu lực hay không
+    def is_valid(self):
+        now = timezone.now()
+        return (
+            self.is_active and 
+            self.start_date <= now <= self.end_date and 
+            self.used_count < self.usage_limit
+        )
