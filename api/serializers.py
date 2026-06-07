@@ -369,6 +369,7 @@ class CartItemSerializer(serializers.ModelSerializer):
     
     product_id = serializers.IntegerField(source='product.id', read_only=True)
     productId = serializers.IntegerField(source='product.id', read_only=True)
+    store_id = serializers.IntegerField(source='product.store.id', read_only=True)
     store_name = serializers.CharField(source='product.store.store_name', read_only=True)
     store_address = serializers.CharField(source='product.store.address', read_only=True)
     stock = serializers.SerializerMethodField()
@@ -376,7 +377,7 @@ class CartItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = CartItem
         # 👉 Thêm 'imageUrl' vào danh sách
-        fields = ['id', 'product_id', 'productId', 'product_name', 'price', 'quantity', 'store_name', 'store_address', 'image_url', 'imageUrl', 'variant', 'stock']
+        fields = ['id', 'product_id', 'productId', 'product_name', 'price', 'quantity','store_id', 'store_name', 'store_address', 'image_url', 'imageUrl', 'variant', 'stock']
 
     # Hàm đồng bộ dữ liệu cho Flutter
     def get_imageUrl(self, obj):
