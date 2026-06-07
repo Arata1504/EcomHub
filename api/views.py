@@ -965,22 +965,23 @@ class VoucherViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        # Chỉ trả về danh sách mã giảm giá của chính cửa hàng đang đăng nhập
         user = self.request.user
-        # Kiểm tra xem user này có cửa hàng không
-        if hasattr(user, 'store'):
-            return Voucher.objects.filter(store=user.store).order_by('-start_date')
+        
+        if hasattr(user, 'store') and user.store.exists():
+            my_store = user.store.first()
+            return Voucher.objects.filter(store=my_store).order_by('-start_date')
         return Voucher.objects.none()
 
     def perform_create(self, serializer):
-        # Tự động gán cửa hàng của user hiện tại cho mã giảm giá mới
         user = self.request.user
-        if not hasattr(user, 'store'):
+        
+        if not hasattr(user, 'store') or not user.store.exists():
             raise ValidationError({"error": "Bạn phải tạo cửa hàng trước khi tạo mã giảm giá."})
         
-        # Kiểm tra trùng mã (Code) trong cùng một cửa hàng
+        my_store = user.store.first()
         code = serializer.validated_data.get('code')
-        if Voucher.objects.filter(store=user.store, code=code).exists():
+        
+        if Voucher.objects.filter(store=my_store, code=code).exists():
             raise ValidationError({"error": "Mã giảm giá này đã tồn tại trong cửa hàng của bạn."})
 
-        serializer.save(store=user.store)
+        serializer.save(store=my_store)
