@@ -985,3 +985,16 @@ class VoucherViewSet(viewsets.ModelViewSet):
             raise ValidationError({"error": "Mã giảm giá này đã tồn tại trong cửa hàng của bạn."})
 
         serializer.save(store=my_store)
+
+    @action(detail=False, methods=['get'])
+    def available(self, request):
+        now = timezone.now()
+        vouchers = Voucher.objects.filter(
+            is_active=True,
+            start_date__lte=now,
+            end_date__gte=now,
+            used_count__lt=Q('usage_limit')
+        ).order_by('-discount_value')
+        
+        serializer = self.get_serializer(vouchers, many=True)
+        return Response(serializer.data)
