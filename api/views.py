@@ -749,9 +749,14 @@ class OrderViewSet(viewsets.ModelViewSet):
             )
 
         for voucher in applied_vouchers:
-            voucher.used_count = F('used_count') + 1
-            voucher.save(update_fields=['used_count'])
-
+            updated_count = Voucher.objects.filter(
+                id=voucher.id, 
+                used_count__lt=F('usage_limit')
+            ).update(used_count=F('used_count') + 1)
+            
+            if updated_count == 0:
+                raise ValidationError({"error": f"Mã {voucher.code} đã vừa hết lượt sử dụng!"})
+            
         return Response({"message": "Đặt hàng thành công!", "order_id": order.id}, status=status.HTTP_201_CREATED)
         
     def partial_update(self, request, *args, **kwargs):
