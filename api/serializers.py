@@ -555,6 +555,8 @@ class MessageSerializer(serializers.ModelSerializer):
 class VoucherSerializer(serializers.ModelSerializer):
     class Meta:
         model = Voucher
-        fields = '__all__'
+        fields = ['id', 'code', 'name', 'discount_type', 'discount_value', 
+                  'min_order_value', 'max_discount', 'usage_limit', 
+                  'used_count', 'start_date', 'end_date', 'is_active', 'store_id']
         # Những trường này người bán không được tự ý sửa khi gửi request
         read_only_fields = ('id', 'store', 'used_count')

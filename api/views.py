@@ -720,6 +720,8 @@ class OrderViewSet(viewsets.ModelViewSet):
                         # Cắt ngọn nếu vượt Max Discount
                         if voucher.max_discount and discount > float(voucher.max_discount):
                             discount = float(voucher.max_discount)
+                    if voucher.discount_type == 'shipping':
+                        discount = shipping_fee
                     else:
                         # Giảm thẳng: Không được giảm lố qua số tiền món hàng
                         discount = min(float(voucher.discount_value), eligible_subtotal)
@@ -986,13 +988,11 @@ class VoucherViewSet(viewsets.ModelViewSet):
         
         if product_ids:
             p_ids = [int(pid) for pid in product_ids.split(',') if pid.isdigit()]
-            
+            # Lấy danh sách store_id của các sản phẩm này
             store_ids = Product.objects.filter(id__in=p_ids).values_list('store_id', flat=True).distinct()
             
+            # Lấy mã của store đó HOẶC mã toàn sàn (store__isnull=True)
             queryset = queryset.filter(Q(store_id__in=store_ids) | Q(store__isnull=True))
-        else:
-            queryset = queryset.filter(store__isnull=True)
-
-        queryset = queryset.order_by('-discount_value')
+        
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
