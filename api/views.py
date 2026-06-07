@@ -748,14 +748,15 @@ class OrderViewSet(viewsets.ModelViewSet):
                 variant=item_data['variant']
             )
 
-        for voucher in applied_vouchers:
-            updated_count = Voucher.objects.filter(
-                id=voucher.id, 
-                used_count__lt=F('usage_limit')
-            ).update(used_count=F('used_count') + 1)
+        for voucher in valid_vouchers:
+            eligible_subtotal = 0
             
-            if updated_count == 0:
-                raise ValidationError({"error": f"Mã {voucher.code} đã vừa hết lượt sử dụng!"})
+            if voucher.store is None:
+                eligible_subtotal = subtotal 
+            else:
+                for item_data in order_items_data:
+                    if item_data['product'].store_id == voucher.store_id:
+                        eligible_subtotal += item_data['price'] * item_data['quantity']
             
         return Response({"message": "Đặt hàng thành công!", "order_id": order.id}, status=status.HTTP_201_CREATED)
         
