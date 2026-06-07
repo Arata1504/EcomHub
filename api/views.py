@@ -954,16 +954,24 @@ class VoucherViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def available(self, request):
         now = timezone.now()
+        product_ids = request.query_params.get('product_ids', '')
         
-        # Bước 1: Lọc thời gian và trạng thái trước
         queryset = Voucher.objects.filter(
             is_active=True,
             start_date__lte=now,
-            end_date__gte=now
+            end_date__gte=now,
+            used_count__lt=F('usage_limit')
         )
         
-        # Bước 2: Dùng F() object để so sánh cột 'used_count' với cột 'usage_limit'
-        queryset = queryset.filter(used_count__lt=F('usage_limit')).order_by('-discount_value')
-        
+        if product_ids:
+            p_ids = [int(pid) for pid in product_ids.split(',') if pid.isdigit()]
+            
+            store_ids = Product.objects.filter(id__in=p_ids).values_list('store_id', flat=True).distinct()
+            
+            queryset = queryset.filter(Q(store_id__in=store_ids) | Q(store__isnull=True))
+        else:
+            queryset = queryset.filter(store__isnull=True)
+
+        queryset = queryset.order_by('-discount_value')
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
