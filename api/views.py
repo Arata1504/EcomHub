@@ -1,7 +1,7 @@
 import os
 import random
 import google.generativeai as genai
-from django.db.models import Q
+from django.db.models import Q, F
 from django.core.mail import send_mail
 from django.http import JsonResponse
 from django.utils import timezone
@@ -998,7 +998,7 @@ class VoucherViewSet(viewsets.ModelViewSet):
         )
         
         # Bước 2: Dùng F() object để so sánh cột 'used_count' với cột 'usage_limit'
-        queryset = queryset.filter(used_count__lt=Q('usage_limit')).order_by('-discount_value')
+        queryset = queryset.filter(used_count__lt=F('usage_limit')).order_by('-discount_value')
         
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
