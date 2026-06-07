@@ -19,8 +19,8 @@ from django.contrib.auth import authenticate
 from django.db import transaction
 from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
-from .models import Category, Chat, Message, OTPToken, Product, Order, OrderItem, ProductVariant, ProductImage, Review, ReviewImage, Store, CartItem
-from .serializers import CategorySerializer, ChatSerializer, MessageSerializer, ProductSerializer, OrderSerializer, ReviewSerializer, StoreSerializer, UserSerializer, CartItemSerializer
+from .models import Category, Chat, Message, OTPToken, Product, Order, OrderItem, ProductVariant, ProductImage, Review, ReviewImage, Store, CartItem, Voucher
+from .serializers import CategorySerializer, ChatSerializer, MessageSerializer, ProductSerializer, OrderSerializer, ReviewSerializer, StoreSerializer, UserSerializer, CartItemSerializer, VoucherSerializer
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 from django.contrib.auth.hashers import make_password
@@ -959,3 +959,28 @@ class ReviewViewSet(viewsets.ModelViewSet):
         if instance.user != self.request.user:
             raise PermissionDenied("Bạn không có quyền xóa đánh giá của người khác!")
         instance.delete()
+
+class VoucherViewSet(viewsets.ModelViewSet):
+    serializer_class = VoucherSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        # Chỉ trả về danh sách mã giảm giá của chính cửa hàng đang đăng nhập
+        user = self.request.user
+        # Kiểm tra xem user này có cửa hàng không
+        if hasattr(user, 'store'):
+            return Voucher.objects.filter(store=user.store).order_by('-start_date')
+        return Voucher.objects.none()
+
+    def perform_create(self, serializer):
+        # Tự động gán cửa hàng của user hiện tại cho mã giảm giá mới
+        user = self.request.user
+        if not hasattr(user, 'store'):
+            raise ValidationError({"error": "Bạn phải tạo cửa hàng trước khi tạo mã giảm giá."})
+        
+        # Kiểm tra trùng mã (Code) trong cùng một cửa hàng
+        code = serializer.validated_data.get('code')
+        if Voucher.objects.filter(store=user.store, code=code).exists():
+            raise ValidationError({"error": "Mã giảm giá này đã tồn tại trong cửa hàng của bạn."})
+
+        serializer.save(store=user.store)

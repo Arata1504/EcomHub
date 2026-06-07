@@ -4,7 +4,7 @@ from urllib import request
 
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import Attribute, CartItem, Category, Chat, Message, Product, Order, ProductImage, Review, ReviewImage, Store, OrderItem, ProductVariant, AttributeValue
+from .models import Attribute, CartItem, Category, Chat, Message, Product, Order, ProductImage, Review, ReviewImage, Store, OrderItem, ProductVariant, AttributeValue, Voucher
 import json
 
 User = get_user_model()
@@ -551,3 +551,10 @@ class MessageSerializer(serializers.ModelSerializer):
             if first_image and request:
                 return request.build_absolute_uri(first_image.image.url)
         return None
+
+class VoucherSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Voucher
+        fields = '__all__'
+        # Những trường này người bán không được tự ý sửa khi gửi request
+        read_only_fields = ('id', 'store', 'used_count')
