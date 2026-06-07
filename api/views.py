@@ -989,12 +989,16 @@ class VoucherViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def available(self, request):
         now = timezone.now()
-        vouchers = Voucher.objects.filter(
+        
+        # Bước 1: Lọc thời gian và trạng thái trước
+        queryset = Voucher.objects.filter(
             is_active=True,
             start_date__lte=now,
-            end_date__gte=now,
-            used_count__lt=Q('usage_limit')
-        ).order_by('-discount_value')
+            end_date__gte=now
+        )
         
-        serializer = self.get_serializer(vouchers, many=True)
+        # Bước 2: Dùng F() object để so sánh cột 'used_count' với cột 'usage_limit'
+        queryset = queryset.filter(used_count__lt=Q('usage_limit')).order_by('-discount_value')
+        
+        serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
