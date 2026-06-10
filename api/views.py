@@ -673,7 +673,6 @@ class OrderViewSet(viewsets.ModelViewSet):
                 product = Product.objects.get(id=item['product_id'])
                 quantity = item.get('quantity', 1)
                 
-                
                 price = float(product.price)
                 subtotal += price * quantity
                 
@@ -689,9 +688,11 @@ class OrderViewSet(viewsets.ModelViewSet):
         total_discount = 0
         applied_vouchers = []
         
+        valid_vouchers = [] 
+        
         if voucher_ids:
             now = timezone.now()
-            valid_vouchers = Voucher.objects.filter(
+            valid_vouchers = Voucher.objects.select_for_update().filter(
                 id__in=voucher_ids,
                 is_active=True,
                 start_date__lte=now,
@@ -702,28 +703,22 @@ class OrderViewSet(viewsets.ModelViewSet):
             for voucher in valid_vouchers:
                 eligible_subtotal = 0
                 
-                # A. TÍNH TỔNG TIỀN HỢP LỆ CHO VOUCHER NÀY
                 if voucher.store is None:
-                    # Mã Hệ thống: Áp dụng cho toàn bộ tiền hàng
                     eligible_subtotal = subtotal 
                 else:
-                    # Mã của Shop: Chỉ cộng tiền các món hàng thuộc Shop đó
                     for item_data in order_items_data:
                         if item_data['product'].store_id == voucher.store_id:
                             eligible_subtotal += item_data['price'] * item_data['quantity']
 
-                # B. ÁP DỤNG GIẢM GIÁ TRÊN SỐ TIỀN HỢP LỆ (ĐÃ KIỂM TRA ĐƠN TỐI THIỂU & MAX DISCOUNT)
                 if eligible_subtotal >= float(voucher.min_order_value):
                     discount = 0
                     if voucher.discount_type == 'percent':
                         discount = eligible_subtotal * (float(voucher.discount_value) / 100)
-                        # Cắt ngọn nếu vượt Max Discount
                         if voucher.max_discount and discount > float(voucher.max_discount):
                             discount = float(voucher.max_discount)
-                    if voucher.discount_type == 'shipping':
+                    elif voucher.discount_type == 'shipping': 
                         discount = shipping_fee
                     else:
-                        # Giảm thẳng: Không được giảm lố qua số tiền món hàng
                         discount = min(float(voucher.discount_value), eligible_subtotal)
                     
                     total_discount += discount
@@ -738,7 +733,6 @@ class OrderViewSet(viewsets.ModelViewSet):
             total_amount=final_total,
             address=shipping_address,
             status='pending',
-            
         )
         
         for item_data in order_items_data:
@@ -750,15 +744,9 @@ class OrderViewSet(viewsets.ModelViewSet):
                 variant=item_data['variant']
             )
 
-        for voucher in valid_vouchers:
-            eligible_subtotal = 0
-            
-            if voucher.store is None:
-                eligible_subtotal = subtotal 
-            else:
-                for item_data in order_items_data:
-                    if item_data['product'].store_id == voucher.store_id:
-                        eligible_subtotal += item_data['price'] * item_data['quantity']
+        for voucher in applied_vouchers:
+            voucher.used_count += 1
+            voucher.save()
             
         return Response({"message": "Đặt hàng thành công!", "order_id": order.id}, status=status.HTTP_201_CREATED)
         
