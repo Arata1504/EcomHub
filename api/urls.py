@@ -24,6 +24,7 @@ urlpatterns = [
     path('', include(router.urls)),
     path('cart/', CartAPIView.as_view(), name='cart-api'),
     path('cart/<int:pk>/', CartItemDeleteAPIView.as_view(), name='cart-delete-api'),
+    path('update-address/', views.update_address, name='update_address'),
     path('stores/', include(router.urls)), 
     path('update-avatar/', update_avatar),
     path('chats/user/<int:user_id>/', get_user_chats, name='get_user_chats'),

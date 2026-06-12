@@ -299,6 +299,32 @@ def mark_chat_read(request, chat_id):
     except Chat.DoesNotExist:
         return Response({'error': 'Không tìm thấy đoạn chat'}, status=404)
 
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def update_address(request):
+    user = request.user
+    new_address = request.data.get('address')
+    new_phone = request.data.get('phone')
+    
+    fields_to_update = []
+    
+    if new_address:
+        user.address = new_address
+        fields_to_update.append('address')
+        
+    if new_phone:
+        user.phone = new_phone
+        fields_to_update.append('phone')
+        
+    if fields_to_update:
+        user.save(update_fields=fields_to_update) # Lưu thẳng vào bảng User
+        return Response({
+            "message": "Cập nhật thông tin thành công", 
+            "address": user.address,
+            "phone": user.phone
+        }, status=200)
+        
+    return Response({"error": "Vui lòng cung cấp địa chỉ hợp lệ"}, status=400)
 
 # --- PHẦN 2: VIEWSETS (CRUD Tự động) ---
 class SendOTPView(APIView):
