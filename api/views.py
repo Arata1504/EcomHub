@@ -665,18 +665,35 @@ class OrderViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        user = self.request.user
-        as_seller = self.request.query_params.get('as_seller') == 'true'
-        if as_seller:
-            # Kiểm tra xem User này có Store nào không
-            # Nếu dùng quan hệ ForeignKey hoặc OneToOne, hãy đảm bảo tên field là chính xác
-            try:
-                # Lọc những đơn hàng mà trong đó có sản phẩm thuộc Store của User này
-                return Order.objects.filter(items__product__store__owner=user).distinct().order_by('-created_at')
-            except Exception as e:
-                print(f"Lỗi truy vấn Seller Order: {e}")
-                return Order.objects.none()
-        return Order.objects.filter(user=user).order_by('-created_at')
+        queryset = super().get_queryset()
+        
+        three_days_ago = timezone.now() - timedelta(days=3)
+        auto_completed = Order.objects.filter(
+            status='delivered', 
+            delivered_at__lte=three_days_ago
+        )
+        if auto_completed.exists():
+            auto_completed.update(status='completed')
+
+        if self.request.user.is_authenticated:
+            return queryset.filter(user=self.request.user)
+        return queryset
+
+    # 👉 API MỚI: Khách hàng chủ động bấm "Đã nhận hàng"
+    @action(detail=True, methods=['PATCH'])
+    def confirm_received(self, request, pk=None):
+        order = self.get_object()
+        
+        if order.user != request.user:
+            return Response({"error": "Bạn không có quyền thao tác đơn hàng này!"}, status=403)
+            
+        if order.status != 'delivered':
+            return Response({"error": "Đơn hàng chưa ở trạng thái Đã giao!"}, status=400)
+            
+        order.status = 'completed'
+        order.save()
+        
+        return Response({"message": "Cảm ơn bạn đã xác nhận nhận hàng!"}, status=200)
     
     @transaction.atomic 
     def create(self, request, *args, **kwargs):
