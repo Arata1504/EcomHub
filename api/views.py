@@ -920,6 +920,21 @@ class ReviewViewSet(viewsets.ModelViewSet):
         for image_data in images_data:
             ReviewImage.objects.create(review=review, image=image_data)
 
+    def perform_update(self, serializer):
+        # Kiểm tra bảo mật: Chỉ chủ nhân mới được sửa bài của mình
+        if serializer.instance.user != self.request.user:
+            raise ValidationError({"detail": "Bạn không có quyền sửa đánh giá này!"})
+
+        review = serializer.save()
+        images_data = self.request.FILES.getlist('images')
+
+        # Nếu khách hàng có chọn tải lên ảnh MỚI -> Xóa hết ảnh cũ và thay bằng ảnh mới
+        # Nếu khách không tải ảnh mới -> Giữ nguyên ảnh cũ
+        if images_data:
+            ReviewImage.objects.filter(review=review).delete()
+            for image_data in images_data:
+                ReviewImage.objects.create(review=review, image=image_data)
+
     # Lọc đánh giá theo Sản phẩm, Số sao, hoặc Có hình ảnh
     def get_queryset(self):
         queryset = super().get_queryset()
