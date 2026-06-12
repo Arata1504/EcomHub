@@ -898,12 +898,12 @@ class ReviewViewSet(viewsets.ModelViewSet):
             return [AllowAny()]
         return [IsAuthenticated()]
 
+    # 👉 ĐÃ GỘP 2 HÀM PERFORM_CREATE LÀM 1 (Giữ lại tính năng kiểm tra đã mua hàng và lưu ảnh)
     def perform_create(self, serializer):
         product_id = self.request.data.get('product_id')
         product = get_object_or_404(Product, id=product_id)
         
-        # 👉 KIỂM TRA BẢO MẬT: Khách đã mua sản phẩm này chưa?
-        # Lục tìm trong OrderItem xem có đơn hàng nào của User này chứa Product này không
+        # Kiểm tra bảo mật: Khách đã mua sản phẩm này chưa?
         has_bought = OrderItem.objects.filter(
             order__user=self.request.user, 
             product=product
@@ -912,13 +912,14 @@ class ReviewViewSet(viewsets.ModelViewSet):
         if not has_bought:
             raise ValidationError({"detail": "Bạn phải mua sản phẩm này thì mới được viết đánh giá!"})
         
-        # Lưu Review chính
+        # 1. Lưu Review chính
         review = serializer.save(user=self.request.user, product=product)
         
-        # Lưu các ảnh đính kèm (nếu có)
+        # 2. Lưu các ảnh đính kèm (nếu có)
         images_data = self.request.FILES.getlist('images')
         for image_data in images_data:
             ReviewImage.objects.create(review=review, image=image_data)
+
     # Lọc đánh giá theo Sản phẩm, Số sao, hoặc Có hình ảnh
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -928,7 +929,7 @@ class ReviewViewSet(viewsets.ModelViewSet):
         if product_id:
             queryset = queryset.filter(product_id=product_id)
             
-        # 2. Lọc theo số sao (VD: khách bấm vào tab "5 Sao")
+        # 2. Lọc theo số sao
         rating = self.request.query_params.get('rating')
         if rating:
             queryset = queryset.filter(rating=rating)
@@ -938,28 +939,17 @@ class ReviewViewSet(viewsets.ModelViewSet):
         if has_image == 'true':
             queryset = queryset.exclude(images__isnull=True)
 
+        # 4. Lọc review của tôi
         if self.request.query_params.get('my_reviews') == 'true':
             queryset = queryset.filter(user=self.request.user)
             
         return queryset
-        
-    # Logic khi khách hàng Gửi đánh giá mới
-    def perform_create(self, serializer):
-        product_id = self.request.data.get('product_id')
-        product = get_object_or_404(Product, id=product_id)
-        
-        # Lưu Review chính
-        review = serializer.save(user=self.request.user, product=product)
-        
-        # Lưu các ảnh đính kèm (nếu có)
-        images_data = self.request.FILES.getlist('images')
-        for image_data in images_data:
-            ReviewImage.objects.create(review=review, image=image_data)
 
     def perform_destroy(self, instance):
         # Kiểm tra xem người đang bấm xóa có phải là chủ nhân của bài đánh giá không
         if instance.user != self.request.user:
-            raise PermissionDenied("Bạn không có quyền xóa đánh giá của người khác!")
+            # Đổi PermissionDenied thành ValidationError để tránh lỗi chưa import thư viện
+            raise ValidationError({"detail": "Bạn không có quyền xóa đánh giá của người khác!"})
         instance.delete()
 
 class VoucherViewSet(viewsets.ModelViewSet):
