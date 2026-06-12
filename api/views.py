@@ -691,90 +691,94 @@ class OrderViewSet(viewsets.ModelViewSet):
         if not cart_items:
             return Response({"error": "Giỏ hàng trống!"}, status=status.HTTP_400_BAD_REQUEST)
 
-        subtotal = 0
-        order_items_data = []
+        # 1. PHÂN NHÓM SẢN PHẨM THEO CỬA HÀNG
+        store_groups = {}
+        total_cart_value = 0
         
         for item in cart_items:
-            try:
-                product = Product.objects.get(id=item['product_id'])
-                quantity = item.get('quantity', 1)
+            product = get_object_or_404(Product, id=item['product_id'])
+            store_id = product.store_id
+            
+            if store_id not in store_groups:
+                store_groups[store_id] = {'items': [], 'subtotal': 0}
                 
-                price = float(product.price)
-                subtotal += price * quantity
-                
-                order_items_data.append({
-                    'product': product,
-                    'quantity': quantity,
-                    'price': price,
-                    'variant': item.get('variant', '')
-                })
-            except Product.DoesNotExist:
-                return Response({"error": f"Sản phẩm ID {item['product_id']} không tồn tại."}, status=status.HTTP_400_BAD_REQUEST)
+            quantity = item.get('quantity', 1)
+            price = float(product.price)
+            
+            store_groups[store_id]['items'].append({
+                'product': product,
+                'quantity': quantity,
+                'price': price,
+                'variant': item.get('variant', '')
+            })
+            store_groups[store_id]['subtotal'] += price * quantity
+            total_cart_value += price * quantity
 
+        # 2. XỬ LÝ VOUCHER & TÍNH TỔNG GIẢM GIÁ
         total_discount = 0
         applied_vouchers = []
-        
-        valid_vouchers = [] 
         
         if voucher_ids:
             now = timezone.now()
             valid_vouchers = Voucher.objects.select_for_update().filter(
-                id__in=voucher_ids,
-                is_active=True,
-                start_date__lte=now,
-                end_date__gte=now,
-                used_count__lt=F('usage_limit')
+                id__in=voucher_ids, is_active=True, start_date__lte=now, end_date__gte=now, used_count__lt=F('usage_limit')
             )
             
             for voucher in valid_vouchers:
-                eligible_subtotal = 0
-                
-                if voucher.store is None:
-                    eligible_subtotal = subtotal 
+                discount = 0
+                if voucher.discount_type == 'percent':
+                    discount = total_cart_value * (float(voucher.discount_value) / 100)
+                    if voucher.max_discount and discount > float(voucher.max_discount):
+                        discount = float(voucher.max_discount)
+                elif voucher.discount_type == 'shipping':
+                    discount = shipping_fee
                 else:
-                    for item_data in order_items_data:
-                        if item_data['product'].store_id == voucher.store_id:
-                            eligible_subtotal += item_data['price'] * item_data['quantity']
-
-                if eligible_subtotal >= float(voucher.min_order_value):
-                    discount = 0
-                    if voucher.discount_type == 'percent':
-                        discount = eligible_subtotal * (float(voucher.discount_value) / 100)
-                        if voucher.max_discount and discount > float(voucher.max_discount):
-                            discount = float(voucher.max_discount)
-                    elif voucher.discount_type == 'shipping': 
-                        discount = shipping_fee
-                    else:
-                        discount = min(float(voucher.discount_value), eligible_subtotal)
+                    discount = min(float(voucher.discount_value), total_cart_value)
                     
-                    total_discount += discount
-                    applied_vouchers.append(voucher)
+                total_discount += discount
+                applied_vouchers.append(voucher)
 
-        final_total = (subtotal + shipping_fee) - total_discount
-        if final_total < 0:
-            final_total = 0 
+        # 3. CHIA ĐỀU CHI PHÍ CHO CÁC ĐƠN HÀNG
+        num_stores = len(store_groups)
+        split_shipping = shipping_fee / num_stores if num_stores > 0 else 0
+        split_discount = total_discount / num_stores if num_stores > 0 else 0
 
-        order = Order.objects.create(
-            user=user,
-            total_amount=final_total,
-            address=shipping_address,
-            status='pending',
-        )
-        
-        for item_data in order_items_data:
-            OrderItem.objects.create(
-                order=order,
-                product=item_data['product'],
-                quantity=item_data['quantity'],
-                price=item_data['price'],
-                variant=item_data['variant']
+        created_order_ids = []
+
+        # 4. TẠO NHIỀU ĐƠN HÀNG RIÊNG BIỆT (Mỗi Cửa hàng 1 mã đơn)
+        for store_id, group in store_groups.items():
+            final_total = (group['subtotal'] + split_shipping) - split_discount
+            if final_total < 0:
+                final_total = 0 
+
+            # Tạo Order cho Cửa hàng này
+            order = Order.objects.create(
+                user=user,
+                total_amount=final_total,
+                address=shipping_address,
+                status='pending',
             )
+            created_order_ids.append(order.id)
+            
+            # Đẩy sản phẩm vào Order
+            for item_data in group['items']:
+                OrderItem.objects.create(
+                    order=order,
+                    product=item_data['product'],
+                    quantity=item_data['quantity'],
+                    price=item_data['price'],
+                    variant=item_data['variant']
+                )
 
+        # 5. CẬP NHẬT LƯỢT DÙNG VOUCHER
         for voucher in applied_vouchers:
             voucher.used_count += 1
             voucher.save()
             
-        return Response({"message": "Đặt hàng thành công!", "order_id": order.id}, status=status.HTTP_201_CREATED)
+        return Response({
+            "message": "Đặt hàng thành công!", 
+            "order_ids": created_order_ids
+        }, status=status.HTTP_201_CREATED)
         
     def partial_update(self, request, *args, **kwargs):
         # Lấy đơn hàng hiện tại trong DB
