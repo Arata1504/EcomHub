@@ -898,12 +898,10 @@ class ReviewViewSet(viewsets.ModelViewSet):
             return [AllowAny()]
         return [IsAuthenticated()]
 
-    # 👉 ĐÃ GỘP 2 HÀM PERFORM_CREATE LÀM 1 (Giữ lại tính năng kiểm tra đã mua hàng và lưu ảnh)
     def perform_create(self, serializer):
         product_id = self.request.data.get('product_id')
         product = get_object_or_404(Product, id=product_id)
         
-        # Kiểm tra bảo mật: Khách đã mua sản phẩm này chưa?
         has_bought = OrderItem.objects.filter(
             order__user=self.request.user, 
             product=product
@@ -911,11 +909,15 @@ class ReviewViewSet(viewsets.ModelViewSet):
         
         if not has_bought:
             raise ValidationError({"detail": "Bạn phải mua sản phẩm này thì mới được viết đánh giá!"})
+            
+        has_reviewed = Review.objects.filter(user=self.request.user, product=product).exists()
+        if has_reviewed:
+            raise ValidationError({"detail": "Bạn đã đánh giá sản phẩm này rồi. Vui lòng cập nhật lại đánh giá cũ!"})
         
-        # 1. Lưu Review chính
+        # Lưu Review chính
         review = serializer.save(user=self.request.user, product=product)
         
-        # 2. Lưu các ảnh đính kèm (nếu có)
+        # Lưu các ảnh đính kèm (nếu có)
         images_data = self.request.FILES.getlist('images')
         for image_data in images_data:
             ReviewImage.objects.create(review=review, image=image_data)
