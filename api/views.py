@@ -786,6 +786,7 @@ class OrderViewSet(viewsets.ModelViewSet):
                 total_amount=final_total,
                 address=shipping_address,
                 status='pending',
+                shipping_fee=split_shipping,
             )
             created_order_ids.append(order.id)
             
