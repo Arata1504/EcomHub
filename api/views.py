@@ -677,10 +677,20 @@ class OrderViewSet(viewsets.ModelViewSet):
         if auto_completed.exists():
             auto_completed.update(status='completed')
 
-        if self.request.user.is_authenticated:
-            return queryset.filter(user=self.request.user)
+        if not self.request.user.is_authenticated:
+            return queryset.none()
 
-        return queryset.none()
+        store_id = self.request.query_params.get('store_id')
+        is_seller = self.request.query_params.get('is_seller')
+        
+        if store_id:
+            return queryset.filter(items__product__store_id=store_id).distinct()
+            
+        elif is_seller == 'true':
+            return queryset.filter(items__product__store__user=self.request.user).distinct()
+
+        # 👉 NẾU LÀ NGƯỜI MUA BÌNH THƯỜNG: Chỉ trả về đơn họ đã đặt
+        return queryset.filter(user=self.request.user).distinct()
 
     @action(detail=True, methods=['PATCH'])
     def confirm_received(self, request, pk=None):
