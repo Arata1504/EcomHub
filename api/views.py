@@ -687,7 +687,7 @@ class OrderViewSet(viewsets.ModelViewSet):
             return queryset.filter(items__product__store_id=store_id).distinct()
             
         elif as_seller == 'true':
-            return queryset.filter(items__product__store__user=self.request.user).distinct()
+            return queryset.filter(items__product__store__owner=self.request.user).distinct()
 
         # 👉 NẾU LÀ NGƯỜI MUA BÌNH THƯỜNG: Chỉ trả về đơn họ đã đặt
         return queryset.filter(user=self.request.user).distinct()
