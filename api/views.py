@@ -1,6 +1,7 @@
 import os
 import random
 import google.generativeai as genai
+from datetime import timedelta
 from django.db.models import Q, F
 from django.core.mail import send_mail
 from django.http import JsonResponse
