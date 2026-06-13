@@ -661,6 +661,7 @@ class ProductViewSet(viewsets.ModelViewSet):
                 ProductImage.objects.create(product=product, image=image_data)
 
 class OrderViewSet(viewsets.ModelViewSet):
+    queryset = Order.objects.all().order_by('-created_at')
     serializer_class = OrderSerializer
     permission_classes = [IsAuthenticated]
 
@@ -677,9 +678,9 @@ class OrderViewSet(viewsets.ModelViewSet):
 
         if self.request.user.is_authenticated:
             return queryset.filter(user=self.request.user)
-        return queryset
 
-    # 👉 API MỚI: Khách hàng chủ động bấm "Đã nhận hàng"
+        return queryset.none()
+
     @action(detail=True, methods=['PATCH'])
     def confirm_received(self, request, pk=None):
         order = self.get_object()
