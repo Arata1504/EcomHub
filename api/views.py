@@ -681,12 +681,12 @@ class OrderViewSet(viewsets.ModelViewSet):
             return queryset.none()
 
         store_id = self.request.query_params.get('store_id')
-        is_seller = self.request.query_params.get('is_seller')
+        as_seller = self.request.query_params.get('as_seller')
         
         if store_id:
             return queryset.filter(items__product__store_id=store_id).distinct()
             
-        elif is_seller == 'true':
+        elif as_seller == 'true':
             return queryset.filter(items__product__store__user=self.request.user).distinct()
 
         # 👉 NẾU LÀ NGƯỜI MUA BÌNH THƯỜNG: Chỉ trả về đơn họ đã đặt
