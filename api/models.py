@@ -130,12 +130,14 @@ class CartItem(models.Model):
 class Order(models.Model):
     STATUS_CHOICES = (
         ('pending', 'Chờ xác nhận'),
-        ('shipping', 'Đang giao'),
-        ('completed', 'Đã giao'),
+        ('processing', 'Chờ lấy hàng'),
+        ('shipped', 'Đang giao'),
+        ('delivered', 'Đã giao'),
+        ('completed', 'Hoàn tất'),
         ('cancelled', 'Đã hủy'),
     )
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='orders')
-    total_amount = models.DecimalField(max_digits=12, decimal_places=0) # Đổi tên cho khớp với views.py
+    total_amount = models.DecimalField(max_digits=12, decimal_places=0) 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     address = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
