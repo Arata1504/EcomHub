@@ -3,7 +3,7 @@ import secrets
 import string
 from django.utils import timezone
 
-from django.db import models
+from django.db import IntegrityError, IntegrityError, models, transaction
 from django.contrib.auth.models import AbstractUser
 
 class User(AbstractUser):
@@ -147,7 +147,7 @@ class Order(models.Model):
         ('completed', 'Hoàn tất'),
         ('cancelled', 'Đã hủy'),
     )
-    id = models.CharField(max_length=20, primary_key=True, default=generate_order_id, editable=False)
+    order_code = models.CharField(max_length=20, unique=True, editable=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='orders')
     total_amount = models.DecimalField(max_digits=12, decimal_places=0) 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
@@ -155,6 +155,20 @@ class Order(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     delivered_at = models.DateTimeField(null=True, blank=True)
     shipping_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    def save(self, *args, **kwargs):
+        if not self.order_code:
+            max_retries = 3
+            for _ in range(max_retries):
+                try:
+                    self.order_code = generate_order_id()
+                    with transaction.atomic():
+                        super(Order, self).save(*args, **kwargs)
+                    break
+                except IntegrityError:
+                    continue
+        else:
+            super(Order, self).save(*args, **kwargs)
 
 class OrderItem(models.Model):
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='items')
