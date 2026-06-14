@@ -1,4 +1,6 @@
 from datetime import timedelta
+from random import random
+import string
 from django.utils import timezone
 
 from django.db import models
@@ -127,6 +129,14 @@ class CartItem(models.Model):
     variant = models.CharField(max_length=255, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+def generate_order_id():
+    # Lấy chuỗi NămThángNgày (VD: 20260615)
+    date_str = timezone.now().strftime('%Y%m%d')
+    # Tạo ngẫu nhiên 6 kí tự gồm chữ in hoa (A-Z) và số (0-9)
+    random_str = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    # Ghép lại thành mã hoàn chỉnh (VD: 20260615X7K9V2)
+    return f"{date_str}{random_str}"
+    
 class Order(models.Model):
     STATUS_CHOICES = (
         ('pending', 'Chờ xác nhận'),
@@ -136,6 +146,7 @@ class Order(models.Model):
         ('completed', 'Hoàn tất'),
         ('cancelled', 'Đã hủy'),
     )
+    id = models.CharField(max_length=20, primary_key=True, default=generate_order_id, editable=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='orders')
     total_amount = models.DecimalField(max_digits=12, decimal_places=0) 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
