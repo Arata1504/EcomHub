@@ -1,5 +1,5 @@
 from datetime import timedelta
-from random import random
+import secrets
 import string
 from django.utils import timezone
 
@@ -133,7 +133,8 @@ def generate_order_id():
     # Lấy chuỗi NămThángNgày (VD: 20260615)
     date_str = timezone.now().strftime('%Y%m%d')
     # Tạo ngẫu nhiên 6 kí tự gồm chữ in hoa (A-Z) và số (0-9)
-    random_str = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    alphabet = string.ascii_uppercase + string.digits
+    random_str = ''.join(secrets.choice(alphabet) for _ in range(6))
     # Ghép lại thành mã hoàn chỉnh (VD: 20260615X7K9V2)
     return f"{date_str}{random_str}"
     
