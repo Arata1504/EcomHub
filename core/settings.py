@@ -200,6 +200,8 @@ CSRF_TRUSTED_ORIGINS = [
     'https://ecomhub-6vca.onrender.com',
 ]
 
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
 # CẤU HÌNH GỬI EMAIL TỰ ĐỘNG QUA GMAIL SMTP
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
