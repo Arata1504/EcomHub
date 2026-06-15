@@ -581,6 +581,7 @@ class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.all().order_by('-created_at')
     serializer_class = ProductSerializer
     pagination_class = ProductPagination
+    filterset_fields = ['store_id', 'category_id']
 
     def get_permissions(self):
         if self.action in ['list', 'retrieve']:
