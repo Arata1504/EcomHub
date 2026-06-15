@@ -27,6 +27,7 @@ urlpatterns = [
     path('update-address/', views.update_address, name='update_address'),
     path('stores/', include(router.urls)), 
     path('update-avatar/', update_avatar),
+    path('change_password/', views.change_password, name='change_password'),
     path('chats/user/<int:user_id>/', get_user_chats, name='get_user_chats'),
     path('chats/store/', views.get_store_chats, name='get_store_chats'),
     path('chats/<int:chat_id>/messages/', get_chat_messages, name='get_chat_messages'),
