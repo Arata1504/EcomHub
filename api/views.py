@@ -975,11 +975,7 @@ class ReviewViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(user=self.request.user)
 
         if self.request.query_params.get('for_my_store') == 'true':
-            if hasattr(self.request.user, 'store') and self.request.user.store.exists():
-                my_store = self.request.user.store.first()
-                queryset = queryset.filter(product__store=my_store)
-            else:
-                queryset = queryset.none()
+            queryset = queryset.filter(product__store__owner=self.request.user).distinct()
             
         return queryset
 
