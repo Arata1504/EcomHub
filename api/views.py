@@ -599,8 +599,14 @@ class ProductViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = Product.objects.all()
+        
         store_id = self.request.query_params.get('store_id')
         category_param = self.request.query_params.get('category')
+        
+        search_query = self.request.query_params.get('search') or self.request.query_params.get('name') or self.request.query_params.get('q')
+
+        if search_query:
+            queryset = queryset.filter(name__icontains=search_query)
 
         if store_id:
             queryset = queryset.filter(store_id=store_id)
