@@ -599,10 +599,12 @@ class ProductViewSet(viewsets.ModelViewSet):
         if self.request.query_params.get('my_store') == 'true' and self.request.user.is_authenticated:
             queryset = queryset.filter(store__owner=self.request.user)
             
-        category_id = self.request.query_params.get('category')
-
-        if category_id:
-            queryset = queryset.filter(category_id=category_id)
+        category_param = self.request.query_params.get('category')
+        if category_param:
+            if category_param.isdigit():
+                queryset = queryset.filter(category_id=category_param)
+            else:
+                queryset = queryset.filter(category__name=category_param)
 
         search_query = self.request.query_params.get('search')
 
