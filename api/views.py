@@ -589,7 +589,7 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.all().order_by('-created_at')
     serializer_class = ProductSerializer
-    pagination_class = ProductPagination
+    pagination_class = None
     filterset_fields = ['store_id', 'category_id']
 
     def get_permissions(self):
