@@ -598,8 +598,9 @@ class ProductViewSet(viewsets.ModelViewSet):
         return [IsAuthenticated()]
 
     def get_queryset(self):
-        queryset = Product.objects.all()
+        queryset = Product.objects.select_related('store', 'category').prefetch_related('images', 'variants')
         
+        # Lấy các tham số từ URL
         store_id = self.request.query_params.get('store_id')
         category_param = self.request.query_params.get('category')
         
@@ -617,7 +618,7 @@ class ProductViewSet(viewsets.ModelViewSet):
             else:
                 queryset = queryset.filter(category__name=category_param)
 
-        return queryset
+        return queryset.order_by('-created_at')
 
     def perform_create(self, serializer):
         store_instance = self.request.user.store.first() 
