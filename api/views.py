@@ -922,6 +922,11 @@ class StoreViewSet(viewsets.ModelViewSet):
         user.role = 'seller'
         user.save()
 
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve']:
+            return [AllowAny()] 
+        return [IsAuthenticated()]
+
 class ReviewViewSet(viewsets.ModelViewSet):
     queryset = Review.objects.all().order_by('-created_at')
     serializer_class = ReviewSerializer
