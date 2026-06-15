@@ -972,10 +972,16 @@ class ReviewViewSet(viewsets.ModelViewSet):
             queryset = queryset.exclude(images__isnull=True)
 
         if self.request.query_params.get('my_reviews') == 'true':
-            queryset = queryset.filter(user=self.request.user)
+            if self.request.user.is_authenticated:
+                queryset = queryset.filter(user=self.request.user)
+            else:
+                queryset = queryset.none()
 
         if self.request.query_params.get('for_my_store') == 'true':
-            queryset = queryset.filter(product__store__owner=self.request.user).distinct()
+            if self.request.user.is_authenticated:
+                queryset = queryset.filter(product__store__owner=self.request.user).distinct()
+            else:
+                queryset = queryset.none()
             
         return queryset
 
