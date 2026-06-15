@@ -328,23 +328,30 @@ def mark_chat_read(request, chat_id):
 @permission_classes([IsAuthenticated])
 def update_address(request):
     user = request.user
+    
+    new_username = request.data.get('username')
     new_address = request.data.get('address')
     new_phone = request.data.get('phone')
     
     fields_to_update = []
     
-    if new_address:
-        user.address = new_address
+    if new_username and new_username.strip(): 
+        user.username = new_username.strip()
+        fields_to_update.append('username')
+        
+    if new_address and new_address.strip():
+        user.address = new_address.strip()
         fields_to_update.append('address')
         
-    if new_phone:
-        user.phone = new_phone
+    if new_phone and new_phone.strip():
+        user.phone = new_phone.strip()
         fields_to_update.append('phone')
         
     if fields_to_update:
         user.save(update_fields=fields_to_update) # Lưu thẳng vào bảng User
         return Response({
             "message": "Cập nhật thông tin thành công", 
+            "username": user.username,
             "address": user.address,
             "phone": user.phone
         }, status=200)
