@@ -577,6 +577,15 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = CategorySerializer
     pagination_class = None
 
+    def get_queryset(self):
+        queryset = Category.objects.all()
+        store_id = self.request.query_params.get('store_id')
+
+        if store_id:
+            queryset = queryset.filter(products__store_id=store_id).distinct()
+
+        return queryset
+
 class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.all().order_by('-created_at')
     serializer_class = ProductSerializer
@@ -589,78 +598,39 @@ class ProductViewSet(viewsets.ModelViewSet):
         return [IsAuthenticated()]
 
     def get_queryset(self):
-        queryset = super().get_queryset().select_related(
-            'store',
-        ).prefetch_related(
-            'images', 
-        )
-
-        
-        if self.request.query_params.get('my_store') == 'true' and self.request.user.is_authenticated:
-            queryset = queryset.filter(store__owner=self.request.user)
-            
+        queryset = Product.objects.all()
+        store_id = self.request.query_params.get('store_id')
         category_param = self.request.query_params.get('category')
+
+        if store_id:
+            queryset = queryset.filter(store_id=store_id)
+
         if category_param:
             if category_param.isdigit():
                 queryset = queryset.filter(category_id=category_param)
             else:
                 queryset = queryset.filter(category__name=category_param)
 
-        search_query = self.request.query_params.get('search')
-
-        if search_query:
-            queryset = queryset.filter(name__icontains=search_query)
-            
-        sort_by = self.request.query_params.get('sort')
-        if sort_by == 'sales':
-            queryset = queryset.order_by('-sold_count') # Bán chạy nhất (giảm dần)
-        elif sort_by == 'price_asc':
-            queryset = queryset.order_by('price')       # Giá từ thấp đến cao
-        elif sort_by == 'price_desc':
-            queryset = queryset.order_by('-price')      # Giá từ cao đến thấp
-
-        # 👉 4. THÊM MỚI: Khoảng giá (Min / Max)
-        min_price = self.request.query_params.get('min_price')
-        max_price = self.request.query_params.get('max_price')
-        
-        if min_price:
-            queryset = queryset.filter(price__gte=min_price) # Lớn hơn hoặc bằng min
-        if max_price:
-            queryset = queryset.filter(price__lte=max_price) # Nhỏ hơn hoặc bằng max
-            
-        category_id = self.request.query_params.get('category')
-        if category_id:
-            queryset = queryset.filter(category_id=category_id)
-            
         return queryset
 
-    # Khi tạo sản phẩm, tự động gắn với Store của người dùng đó (nếu là Seller)
     def perform_create(self, serializer):
         store_instance = self.request.user.store.first() 
         
         if store_instance:
-            # Lưu các thông tin chữ (tên, giá...) vào bảng Product trước
             product = serializer.save(store=store_instance)
             
-            # 👉 BẮT TAY XỬ LÝ ẢNH
-            images_data = self.request.FILES.getlist('images') # 'images' là tên key Flutter gửi lên
+            images_data = self.request.FILES.getlist('images') 
             for image_data in images_data:
                 ProductImage.objects.create(product=product, image=image_data)
         else:
             raise ValidationError({"error": "Bạn chưa có cửa hàng để thêm sản phẩm."})
 
-    # 2. XỬ LÝ KHI CHỦ SHOP BẤM NÚT "CẬP NHẬT SẢN PHẨM"
     def perform_update(self, serializer):
-        # Cập nhật thông tin chữ trước
         product = serializer.save()
         
-        # Bắt lấy danh sách ảnh mới nếu có
         images_data = self.request.FILES.getlist('images')
         
         if images_data:
-            # (Tùy chọn): Nếu bạn muốn quy tắc "Xóa sạch ảnh cũ khi tải ảnh mới lên" thì mở comment dòng bên dưới
-            # ProductImage.objects.filter(product=product).delete()
-            
             for image_data in images_data:
                 ProductImage.objects.create(product=product, image=image_data)
 
