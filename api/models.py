@@ -183,10 +183,12 @@ class OrderItem(models.Model):
 class Review(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='reviews')
     user = models.ForeignKey(User, on_delete=models.CASCADE)
-    rating = models.IntegerField(default=5) # Số sao từ 1 đến 5
-    content = models.TextField(blank=True, null=True) # Nội dung khách khen/chê
-    variant = models.CharField(max_length=255, blank=True, null=True) # Lưu lại khách đã mua phân loại nào (VD: Màu Bạc, 256GB)
+    rating = models.IntegerField(default=5) 
+    content = models.TextField(blank=True, null=True) 
+    variant = models.CharField(max_length=255, blank=True, null=True) 
     created_at = models.DateTimeField(auto_now_add=True)
+    seller_reply = models.TextField(null=True, blank=True)
+    reply_created_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ['-created_at'] # Đánh giá mới nhất sẽ tự động lên đầu

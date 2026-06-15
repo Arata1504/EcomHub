@@ -956,28 +956,30 @@ class ReviewViewSet(viewsets.ModelViewSet):
             for image_data in images_data:
                 ReviewImage.objects.create(review=review, image=image_data)
 
-    # Lọc đánh giá theo Sản phẩm, Số sao, hoặc Có hình ảnh
     def get_queryset(self):
         queryset = super().get_queryset()
         
-        # 1. Bắt buộc phải có product_id thì mới hiện đánh giá của đúng sản phẩm đó
         product_id = self.request.query_params.get('product_id')
         if product_id:
             queryset = queryset.filter(product_id=product_id)
             
-        # 2. Lọc theo số sao
         rating = self.request.query_params.get('rating')
         if rating:
             queryset = queryset.filter(rating=rating)
             
-        # 3. Lọc tab "Có hình ảnh"
         has_image = self.request.query_params.get('has_image')
         if has_image == 'true':
             queryset = queryset.exclude(images__isnull=True)
 
-        # 4. Lọc review của tôi
         if self.request.query_params.get('my_reviews') == 'true':
             queryset = queryset.filter(user=self.request.user)
+
+        if self.request.query_params.get('for_my_store') == 'true':
+            if hasattr(self.request.user, 'store') and self.request.user.store.exists():
+                my_store = self.request.user.store.first()
+                queryset = queryset.filter(product__store=my_store)
+            else:
+                queryset = queryset.none()
             
         return queryset
 
@@ -987,6 +989,36 @@ class ReviewViewSet(viewsets.ModelViewSet):
             # Đổi PermissionDenied thành ValidationError để tránh lỗi chưa import thư viện
             raise ValidationError({"detail": "Bạn không có quyền xóa đánh giá của người khác!"})
         instance.delete()
+
+    @action(detail=True, methods=['PATCH'])
+    def reply(self, request, pk=None):
+        review = self.get_object()
+        seller_reply = request.data.get('seller_reply')
+
+        # Kiểm tra bảo mật: Người đang gọi API có phải là Chủ của cửa hàng bán món đồ này không?
+        if review.product.store.owner != request.user:
+            return Response(
+                {"error": "Bạn không có quyền phản hồi đánh giá của cửa hàng khác!"}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        if not seller_reply:
+            return Response(
+                {"error": "Vui lòng nhập nội dung phản hồi."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Lưu câu trả lời
+        review.seller_reply = seller_reply
+        review.reply_created_at = timezone.now()
+        review.save()
+
+        # Trả về dữ liệu đánh giá mới đã có phản hồi
+        serializer = self.get_serializer(review)
+        return Response({
+            "message": "Đã gửi phản hồi thành công!",
+            "review": serializer.data
+        }, status=status.HTTP_200_OK)
 
 class VoucherViewSet(viewsets.ModelViewSet):
     serializer_class = VoucherSerializer

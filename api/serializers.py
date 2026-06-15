@@ -9,7 +9,6 @@ import json
 
 User = get_user_model()
 
-# 1. Serializer cho User (Đăng ký/Lấy thông tin)
 class UserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True) # Chỉ cho phép ghi password, không trả về khi xem
 
@@ -30,7 +29,6 @@ class UserSerializer(serializers.ModelSerializer):
             user.save()
         return user
 
-# 2. Serializer cho Store (Cửa hàng)
 class StoreSerializer(serializers.ModelSerializer):
     class Meta:
         model = Store
@@ -66,7 +64,6 @@ class CategorySerializer(serializers.ModelSerializer):
         model = Category
         fields = ['id', 'name', 'slug', 'icon']
 
-# 3. Serializer cho Product (Sản phẩm)
 class ProductSerializer(serializers.ModelSerializer):
     store_id = serializers.IntegerField(source='store.id', read_only=True)
     store_name = serializers.CharField(source='store.store_name', read_only=True)
@@ -330,7 +327,6 @@ class ProductSerializer(serializers.ModelSerializer):
         avg_rating = obj.reviews.aggregate(Avg('rating'))['rating__avg']
         return round(avg_rating, 1) if avg_rating else 0.0
     
-# 4. Serializer cho OrderItem (Chi tiết đơn hàng - nằm trong Order)
 class OrderItemSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source='product.name', read_only=True)
     product_image = serializers.SerializerMethodField()
@@ -348,7 +344,6 @@ class OrderItemSerializer(serializers.ModelSerializer):
             return request.build_absolute_uri(first_image.image.url)
         return "" 
 
-# 5. Serializer cho Order (Đơn hàng)
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
     user_id = serializers.IntegerField(source='user.id', read_only=True)
@@ -442,7 +437,6 @@ class CartItemSerializer(serializers.ModelSerializer):
             pass
         return base_stock
     
-# 6. Serializer cho Đánh giá (Review)
 class ReviewImageSerializer(serializers.ModelSerializer):
     class Meta:
         model = ReviewImage
@@ -455,10 +449,12 @@ class ReviewSerializer(serializers.ModelSerializer):
     images = serializers.SerializerMethodField()
     product_name = serializers.CharField(source='product.name', read_only=True)
     product_image = serializers.SerializerMethodField()
+    seller_reply = serializers.CharField(read_only=True)
+    reply_created_at = serializers.DateTimeField(read_only=True)
 
     class Meta:
         model = Review
-        fields = ['id', 'user_name', 'user_avatar', 'rating', 'content', 'variant', 'created_at', 'images', 'product_name', 'product_image']
+        fields = ['id', 'user_name', 'user_avatar', 'rating', 'content', 'variant', 'created_at', 'images', 'product_name', 'product_image', 'seller_reply', 'reply_created_at']
 
     def get_user_avatar(self, obj):
         request = self.context.get('request')
@@ -491,8 +487,7 @@ class ReviewSerializer(serializers.ModelSerializer):
             pass
             
         return ""
-    
-# 7. Serializer cho Chat
+
 class ChatSerializer(serializers.ModelSerializer):
     customer_name = serializers.CharField(source='customer.username', read_only=True)
     customer_image = serializers.SerializerMethodField()
@@ -529,7 +524,7 @@ class ChatSerializer(serializers.ModelSerializer):
             
             return request.build_absolute_uri(encoded_url) if request else f"http://127.0.0.1:8000{encoded_url}"
         return None
-# 8. Serializer cho Message
+
 class MessageSerializer(serializers.ModelSerializer):
     sender_name = serializers.CharField(source='sender.username', read_only=True)
     type = serializers.CharField(source='msg_type', read_only=True)
