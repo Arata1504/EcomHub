@@ -634,14 +634,19 @@ class ProductViewSet(viewsets.ModelViewSet):
         # Lấy các tham số từ URL
         store_id = self.request.query_params.get('store_id')
         category_param = self.request.query_params.get('category')
-        
         search_query = self.request.query_params.get('search') or self.request.query_params.get('name') or self.request.query_params.get('q')
+
+        # 👉 1. THÊM BIẾN NHẬN TÍN HIỆU TỪ APP
+        for_my_store = self.request.query_params.get('for_my_store')
 
         if search_query:
             queryset = queryset.filter(name__icontains=search_query)
 
         if store_id:
             queryset = queryset.filter(store_id=store_id)
+
+        if for_my_store == 'true' and self.request.user.is_authenticated:
+            queryset = queryset.filter(store__owner=self.request.user)
 
         if category_param:
             if category_param.isdigit():
