@@ -41,6 +41,11 @@ class Store(models.Model):
     description = models.TextField(null=True, blank=True)
     address = models.CharField(max_length=255, null=True, blank=True)
     avatar_url = models.ImageField(upload_to='avatars/stores/', max_length=255,null=True, blank=True)
+
+    phone_number = models.CharField('Số điện thoại shop', max_length=20, null=True, blank=True)
+    email = models.EmailField('Email liên hệ', null=True, blank=True)
+    owner_name = models.CharField('Họ tên chủ shop', max_length=255, null=True, blank=True)
+    id_number = models.CharField('Số CCCD', max_length=20, null=True, blank=True)
     
     # Kinh doanh
     rating = models.DecimalField(max_digits=3, decimal_places=2, default=0.0)

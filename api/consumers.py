@@ -36,7 +36,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     'user_id': self.connected_user_id
                 }
             )
-        print(f"🔗 Đã kết nối WebSocket tới phòng {self.room_group_name} (User ID: {self.connected_user_id})")
 
     @database_sync_to_async
     def get_user_id_from_token(self, token_key):
@@ -59,12 +58,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     'user_id': self.connected_user_id
                 }
             )
-            print(f"🚀 [BACKEND] Đã phát tín hiệu offline cho user: {self.connected_user_id}")
         
         await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
 
     async def presence_update(self, event):
-        print(f"🚀 [BACKEND] Đang gửi Presence Update: {event}")
         await self.send(text_data=json.dumps({
             'type': 'presence_update',
             'is_online': event['is_online'],

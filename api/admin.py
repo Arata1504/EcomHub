@@ -115,8 +115,20 @@ class ReviewImageInline(admin.StackedInline):
 # ==========================================
 @admin.register(Store)
 class StoreAdmin(admin.ModelAdmin):
-    list_display = ('store_name', 'owner', 'address', 'rating', 'total_sales', 'created_at')
-    search_fields = ('store_name', 'owner__username')
+    list_display = ('store_name', 'owner', 'verification_status', 'is_active', 'created_at')
+    
+    # Thêm bộ lọc để dễ tìm kiếm
+    list_filter = ('verification_status', 'is_active')
+    search_fields = ('store_name', 'tax_code', 'bank_account')
+
+    # 👉 QUAN TRỌNG: Hàm này sẽ khóa tất cả các ô, CHỈ CHO PHÉP sửa 2 ô trạng thái
+    def get_readonly_fields(self, request, obj=None):
+        if obj: # Nếu đang xem chi tiết một Cửa hàng đã tồn tại
+            # Lấy toàn bộ các trường của Store
+            all_fields = [f.name for f in self.model._meta.fields]
+            # Loại trừ 2 trường cho phép sửa
+            return [f for f in all_fields if f not in ['verification_status', 'is_active']]
+        return self.readonly_fields
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
