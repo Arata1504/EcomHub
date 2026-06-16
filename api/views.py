@@ -481,11 +481,25 @@ class SystemChatBotView(APIView):
                     desc = getattr(p, 'description', getattr(p, 'detail', 'Không có mô tả'))
                     category = p.category.name if hasattr(p, 'category') and p.category else 'Chưa phân loại'
 
+                    variants_info = ""
+                    variants = p.variants.all()
+                    if variants.exists():
+                        variants_info = "- Các phân loại/phiên bản hiện có:\n"
+                        for v in variants:
+                            # Trích xuất tên thuộc tính và giá trị (VD: "Màu sắc: Đen", "Phiên bản: 8GB")
+                            attrs = [f"{av.attribute.name}: {av.value}" for av in v.attribute_values.all()]
+                            attr_str = ", ".join(attrs) if attrs else "Mặc định"
+                            # Ghi rõ giá và kho của từng phiên bản cho AI biết
+                            variants_info += f"  + {attr_str} (Giá: {v.price} VNĐ, Kho: {v.stock} cái)\n"
+                    else:
+                        variants_info = "- Sản phẩm này không có phiên bản nào khác (Chỉ có 1 loại mặc định).\n"
+
                     db_context += (
                         f"Tên sản phẩm: {p.name}\n"
                         f"- Giá bán: {p.price} VNĐ\n"
                         f"- Phân loại/Danh mục: {category}\n"
                         f"- Số lượng tồn kho: {stock_qty} cái | Đã bán được: {sold_qty} cái\n"
+                        f"{variants_info}" # <--- Nằm ở đây
                         f"- Mô tả chi tiết & Thông số kỹ thuật: {desc}\n"
                         f"--------------------------------------------------\n"
                     )
@@ -541,6 +555,7 @@ class SystemChatBotView(APIView):
         system_instruction = (
             "Bạn là 'E-Com Assistant', chuyên gia tư vấn bán hàng cấp cao của sàn thương mại điện tử C2C.\n\n"
             f"{db_context}\n\n"
+            f"{personal_context}\n\n"
             "--- LỊCH SỬ TRÒ CHUYỆN TỪ ĐẦU ĐẾN NAY ---\n"
             f"{history_text}\n"
             "-----------------------------------------\n"
