@@ -1010,8 +1010,8 @@ class StoreViewSet(viewsets.ModelViewSet):
             "total_revenue": float(total_revenue),
             "total_orders": total_orders,
             "orders": order_list,
-            "report_period": report_period, # Gửi kèm kỳ báo cáo
-            "report_date": timezone.now().strftime("%d/%m/%Y %H:%M")
+            "report_period": report_period, 
+            "report_date": timezone.localtime(timezone.now()).strftime("%d/%m/%Y %H:%M")
         })
 
 class ReviewViewSet(viewsets.ModelViewSet):
