@@ -971,21 +971,22 @@ class StoreViewSet(viewsets.ModelViewSet):
 
         report_period = "Toàn thời gian"
 
-        products = Product.objects.filter(store=store).annotate(
-            total_sold=Sum('orderitem__quantity', filter=Q(orderitem__order__status__in=['delivered', 'completed']))
-        )
+        product_sales = OrderItem.objects.filter(order__in=valid_orders) \
+            .values('product__name', 'variant', 'product__stock', 'product__rating', 'product__review_count') \
+            .annotate(total_sold=Sum('quantity')) \
+            .order_by('product__name', 'variant')
 
-        product_list = []
-        for p in products:
-            product_list.append({
-                "name": p.name,
-                "variant": "Tổng hợp", 
-                "sold": p.total_sold or 0,
-                "stock": p.stock,
-                "rating": float(p.rating),
-                "reviews": p.review_count
-            })
-
+        product_list = [
+            {
+                "name": item['product__name'],
+                "variant": item['variant'] if item['variant'] else "Mặc định",
+                "sold": item['total_sold'] or 0,
+                "stock": item['product__stock'],
+                "rating": float(item['product__rating'] or 0),
+                "reviews": item['product__review_count'] or 0
+            }
+            for item in product_sales
+        ]
         # 2. LỌC ĐƠN HÀNG THEO NGÀY
         if start_date_str and end_date_str:
             try:
