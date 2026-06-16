@@ -895,6 +895,50 @@ class OrderViewSet(viewsets.ModelViewSet):
         # Nếu là khách hàng bình thường, chạy logic mặc định
         return super().partial_update(request, *args, **kwargs)
     
+    @action(detail=True, methods=['PATCH'])
+    @transaction.atomic 
+    def cancel_order(self, request, pk=None):
+        order = self.get_object()
+
+        is_buyer = order.user == request.user
+        is_seller = False
+        if order.items.exists():
+            is_seller = order.items.first().product.store.owner == request.user
+
+        if not (is_buyer or is_seller):
+            return Response({"error": "Bạn không có quyền hủy đơn hàng này!"}, status=403)
+
+        # 2. Kiểm tra trạng thái hợp lệ
+        if order.status not in ['pending', 'processing']:
+            return Response({"error": "Chỉ có thể hủy đơn hàng khi đang chờ xác nhận hoặc đang xử lý!"}, status=400)
+
+        # 3. LOGIC HOÀN TRẢ KHO
+        for item in order.items.all():
+            product = item.product
+            quantity = item.quantity
+            variant_str = item.variant
+
+            # A. Trả lại kho cho Biến thể (Nếu có)
+            if variant_str and variant_str != 'Mặc định':
+                parts = variant_str.split(',')
+                selected_attrs = {p.split(':')[0].strip(): p.split(':')[1].strip() for p in parts if ':' in p}
+                
+                for v in product.variants.select_for_update().all():
+                    v_attrs = {av.attribute.name.strip(): av.value.strip() for av in v.attribute_values.all()}
+                    if v_attrs == selected_attrs:
+                        v.stock += quantity
+                        v.save()
+                        break
+
+            # B. Trả lại kho cho Sản phẩm gốc (Dùng F expression để tránh lỗi đồng bộ)
+            Product.objects.filter(id=product.id).update(stock=F('stock') + quantity)
+
+        # 4. Đổi trạng thái đơn hàng thành Đã hủy
+        order.status = 'cancelled'
+        order.save()
+
+        return Response({"message": "Đã hủy đơn hàng và hoàn lại số lượng vào kho thành công!"}, status=200)
+    
 class CartAPIView(APIView):
     # Bắt buộc phải có Token (đăng nhập) mới được gọi API này
     permission_classes = [IsAuthenticated]
