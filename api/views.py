@@ -637,7 +637,7 @@ class ProductViewSet(viewsets.ModelViewSet):
         search_query = self.request.query_params.get('search') or self.request.query_params.get('name') or self.request.query_params.get('q')
 
         # 👉 1. THÊM BIẾN NHẬN TÍN HIỆU TỪ APP
-        for_my_store = self.request.query_params.get('for_my_store')
+        for_my_store = self.request.query_params.get('my_store')
 
         if search_query:
             queryset = queryset.filter(name__icontains=search_query)
