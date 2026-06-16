@@ -2,7 +2,7 @@ import os
 import random
 import google.generativeai as genai
 from datetime import timedelta
-from django.db.models import Q, F, Sum, Count
+from django.db.models import Q, F, Avg, Sum, Count
 from django.core.mail import send_mail
 from django.http import JsonResponse
 from django.utils import timezone
@@ -1064,6 +1064,14 @@ class ReviewViewSet(viewsets.ModelViewSet):
         images_data = self.request.FILES.getlist('images')
         for image_data in images_data:
             ReviewImage.objects.create(review=review, image=image_data)
+        
+        stats = Review.objects.filter(product=product).aggregate(
+            avg_rating=Avg('rating'),
+            total_reviews=Count('id')
+        )
+        product.rating = stats['avg_rating'] or 0
+        product.review_count = stats['total_reviews'] or 0
+        product.save()
 
     def perform_update(self, serializer):
         # Kiểm tra bảo mật: Chỉ chủ nhân mới được sửa bài của mình
