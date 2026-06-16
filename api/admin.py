@@ -123,11 +123,9 @@ class StoreAdmin(admin.ModelAdmin):
 
     # 👉 QUAN TRỌNG: Hàm này sẽ khóa tất cả các ô, CHỈ CHO PHÉP sửa 2 ô trạng thái
     def get_readonly_fields(self, request, obj=None):
-        if obj: # Nếu đang xem chi tiết một Cửa hàng đã tồn tại
-            # Lấy toàn bộ các trường của Store
+        if obj:
             all_fields = [f.name for f in self.model._meta.fields]
-            # Loại trừ 2 trường cho phép sửa
-            return [f for f in all_fields if f not in ['verification_status', 'is_active']]
+            return [f for f in all_fields if f not in ['verification_status', 'is_active', 'rejection_reason']]
         return self.readonly_fields
 
 @admin.register(Product)
