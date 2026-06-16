@@ -69,7 +69,7 @@ class Store(models.Model):
         ('rejected', 'Bị từ chối'),
     )
     verification_status = models.CharField('Trạng thái duyệt', max_length=20, choices=STATUS_CHOICES, default='pending')
-    is_active = models.BooleanField('Đang hoạt động', default=True)
+    is_active = models.BooleanField('Đang hoạt động', default='True')
     rejection_reason = models.TextField('Lý do từ chối', null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
