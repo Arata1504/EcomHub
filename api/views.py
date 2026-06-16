@@ -926,18 +926,15 @@ class StoreViewSet(viewsets.ModelViewSet):
     # 👉 ĐÂY LÀ API /my_store/ MÀ FLUTTER ĐANG TÌM KIẾM
     @action(detail=False, methods=['get'])
     def my_store(self, request):
-        try:
-            # Tìm cửa hàng do user đang gửi request làm chủ
-            store = Store.objects.get(owner_id=request.user.id)
+        store = Store.objects.filter(owner_id=request.user.id).first()
+        if store:
             serializer = self.get_serializer(store)
             return Response(serializer.data)
-        except Store.DoesNotExist:
-            return Response(
-                {"error": "Bạn chưa có cửa hàng nào"}, 
-                status=status.HTTP_404_NOT_FOUND
-            )
+        return Response({"error": "Bạn chưa có cửa hàng nào"}, status=status.HTTP_404_NOT_FOUND)
         
     def perform_create(self, serializer):
+        if Store.objects.filter(owner=self.request.user).exists():
+            raise ValidationError({"error": "Bạn đã có một hồ sơ cửa hàng. Vui lòng cập nhật thay vì tạo mới!"})
         serializer.save(owner=self.request.user)
         user = self.request.user
         user.role = 'seller'
@@ -949,7 +946,7 @@ class StoreViewSet(viewsets.ModelViewSet):
         return [IsAuthenticated()]
     
     def perform_update(self, serializer):
-        instance = serializer.save(verification_status='pending', is_active=False)
+        instance = serializer.save(verification_status='pending', is_active=True)
         instance.rejection_reason = ""
         instance.save()
 
