@@ -53,13 +53,18 @@ class Store(models.Model):
     bank_account = models.CharField(max_length=50, null=True, blank=True)
     
     # eKYC
-    front_id_image = models.URLField(null=True, blank=True)
-    back_id_image = models.URLField(null=True, blank=True)
-    business_license = models.URLField(null=True, blank=True)
+    front_id_image = models.ImageField('Mặt trước CCCD', upload_to='stores/ids/', null=True, blank=True)
+    back_id_image = models.ImageField('Mặt sau CCCD', upload_to='stores/ids/', null=True, blank=True)
+    business_license = models.ImageField('Giấy phép KD', upload_to='stores/licenses/', null=True, blank=True)
     
     # Trạng thái
-    verification_status = models.CharField(max_length=20, default='pending')
-    is_active = models.BooleanField(default=True)
+    STATUS_CHOICES = (
+        ('pending', 'Đang chờ duyệt'),
+        ('approved', 'Đã duyệt'),
+        ('rejected', 'Bị từ chối'),
+    )
+    verification_status = models.CharField('Trạng thái duyệt', max_length=20, choices=STATUS_CHOICES, default='pending')
+    is_active = models.BooleanField('Đang hoạt động', default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
