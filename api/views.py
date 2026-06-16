@@ -216,6 +216,10 @@ def place_order(request):
                     variant.stock -= quantity_to_buy
                     variant.save()
 
+                    product = variant.product
+                    product.stock -= quantity_to_buy
+                    product.save()
+
                     Order.objects.create(
                         user_id=user_id,
                         product_id=product_id, 
@@ -794,14 +798,56 @@ class OrderViewSet(viewsets.ModelViewSet):
             )
             created_order_ids.append(order.id)
             
-            # Đẩy sản phẩm vào Order
+            # 👉 NÂNG CẤP: ĐẨY SẢN PHẨM VÀO ORDER KÈM LOGIC TRỪ KHO ĐỒNG BỘ
             for item_data in group['items']:
+                product = item_data['product']
+                quantity_to_buy = item_data['quantity']
+                variant_str = item_data['variant']
+
+                # 1. NẾU SẢN PHẨM CÓ BIẾN THỂ
+                if variant_str and variant_str != 'Mặc định':
+                    target_variant = None
+                    parts = variant_str.split(',')
+                    selected_attrs = {p.split(':')[0].strip(): p.split(':')[1].strip() for p in parts if ':' in p}
+                    
+                    # Tìm chính xác biến thể đang mua
+                    for v in product.variants.select_for_update().all():
+                        v_attrs = {av.attribute.name.strip(): av.value.strip() for av in v.attribute_values.all()}
+                        if v_attrs == selected_attrs:
+                            target_variant = v
+                            break
+                            
+                    if target_variant:
+                        # Kiểm tra xem kho biến thể còn đủ không
+                        if target_variant.stock < quantity_to_buy:
+                            raise ValidationError({"error": f"Phân loại '{variant_str}' của '{product.name}' chỉ còn {target_variant.stock} sản phẩm!"})
+                        
+                        # Trừ kho biến thể
+                        target_variant.stock -= quantity_to_buy
+                        target_variant.save()
+                        
+                        # 👉 ĐỒNG BỘ: Trừ luôn ở kho gốc
+                        product.stock -= quantity_to_buy
+                        product.save()
+                    else:
+                        raise ValidationError({"error": f"Không tìm thấy phân loại '{variant_str}' của sản phẩm '{product.name}'!"})
+                
+                # 2. NẾU SẢN PHẨM KHÔNG CÓ BIẾN THỂ (Hàng Mặc định)
+                else:
+                    if product.stock < quantity_to_buy:
+                        raise ValidationError({"error": f"Sản phẩm '{product.name}' chỉ còn {product.stock} sản phẩm!"})
+                    
+                    # Chỉ trừ kho gốc
+                    product.stock -= quantity_to_buy
+                    product.save()
+
+                # Tạo OrderItem sau khi kho đã trừ thành công
                 OrderItem.objects.create(
                     order=order,
-                    product=item_data['product'],
-                    quantity=item_data['quantity'],
+                    product=product,
+                    quantity=quantity_to_buy,
                     price=item_data['price'],
-                    variant=item_data['variant']
+                    variant=variant_str
                 )
 
         # 5. CẬP NHẬT LƯỢT DÙNG VOUCHER
@@ -1056,21 +1102,6 @@ class ReviewViewSet(viewsets.ModelViewSet):
         product.review_count = stats['total_reviews'] or 0
         product.save()
 
-    def perform_update(self, serializer):
-        # Kiểm tra bảo mật: Chỉ chủ nhân mới được sửa bài của mình
-        if serializer.instance.user != self.request.user:
-            raise ValidationError({"detail": "Bạn không có quyền sửa đánh giá này!"})
-
-        review = serializer.save()
-        images_data = self.request.FILES.getlist('images')
-
-        # Nếu khách hàng có chọn tải lên ảnh MỚI -> Xóa hết ảnh cũ và thay bằng ảnh mới
-        # Nếu khách không tải ảnh mới -> Giữ nguyên ảnh cũ
-        if images_data:
-            ReviewImage.objects.filter(review=review).delete()
-            for image_data in images_data:
-                ReviewImage.objects.create(review=review, image=image_data)
-
     def get_queryset(self):
         queryset = super().get_queryset()
         
@@ -1099,13 +1130,6 @@ class ReviewViewSet(viewsets.ModelViewSet):
                 queryset = queryset.none()
             
         return queryset
-
-    def perform_destroy(self, instance):
-        # Kiểm tra xem người đang bấm xóa có phải là chủ nhân của bài đánh giá không
-        if instance.user != self.request.user:
-            # Đổi PermissionDenied thành ValidationError để tránh lỗi chưa import thư viện
-            raise ValidationError({"detail": "Bạn không có quyền xóa đánh giá của người khác!"})
-        instance.delete()
 
     @action(detail=True, methods=['PATCH'])
     def reply(self, request, pk=None):
