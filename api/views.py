@@ -2,7 +2,7 @@ import os
 import random
 import google.generativeai as genai
 from datetime import timedelta
-from django.db.models import Q, F
+from django.db.models import Q, F, Sum, Count
 from django.core.mail import send_mail
 from django.http import JsonResponse
 from django.utils import timezone
@@ -923,7 +923,6 @@ class StoreViewSet(viewsets.ModelViewSet):
     serializer_class = StoreSerializer
     permission_classes = [IsAuthenticated] # Bắt buộc phải có Token mới được gọi
 
-    # 👉 ĐÂY LÀ API /my_store/ MÀ FLUTTER ĐANG TÌM KIẾM
     @action(detail=False, methods=['get'])
     def my_store(self, request):
         store = Store.objects.filter(owner_id=request.user.id).first()
@@ -953,6 +952,67 @@ class StoreViewSet(viewsets.ModelViewSet):
         instance = serializer.save(verification_status='pending', is_active=True)
         instance.rejection_reason = ""
         instance.save()
+
+    @action(detail=False, methods=['get'])
+    def revenue_report(self, request):
+        from datetime import datetime
+        store = Store.objects.filter(owner=request.user).first()
+        if not store:
+            return Response({"error": "Không tìm thấy cửa hàng"}, status=status.HTTP_404_NOT_FOUND)
+
+        # 1. NHẬN THAM SỐ TỪ FLUTTER
+        start_date_str = request.query_params.get('start_date')
+        end_date_str = request.query_params.get('end_date')
+
+        valid_orders = Order.objects.filter(
+            items__product__store=store,
+            status__in=['delivered', 'completed']
+        ).distinct().order_by('-created_at')
+
+        report_period = "Toàn thời gian"
+
+        # 2. LỌC ĐƠN HÀNG THEO NGÀY
+        if start_date_str and end_date_str:
+            try:
+                start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+                end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+                
+                valid_orders = valid_orders.filter(
+                    created_at__date__gte=start_date,
+                    created_at__date__lte=end_date
+                )
+                
+                # Tạo chữ Kỳ báo cáo để in lên PDF
+                if start_date.year == 2020:
+                     report_period = "Toàn thời gian"
+                elif start_date.month == end_date.month and start_date.year == end_date.year and start_date.day == 1:
+                     report_period = f"Tháng {start_date.month}/{start_date.year}"
+                else:
+                     report_period = f"{start_date.strftime('%d/%m/%Y')} - {end_date.strftime('%d/%m/%Y')}"
+            except ValueError:
+                pass
+
+        total_revenue = valid_orders.aggregate(total=Sum('total_amount'))['total'] or 0
+        total_orders = valid_orders.count()
+
+        # 3. LẤY TOÀN BỘ ĐƠN TRONG KỲ (Đã xóa giới hạn [:50])
+        order_list = []
+        for order in valid_orders: 
+            order_list.append({
+                "order_code": order.order_code,
+                "date": order.created_at.strftime("%d/%m/%Y"),
+                "total": float(order.total_amount)
+            })
+
+        return Response({
+            "store_name": store.store_name,
+            "owner_name": store.owner_name or request.user.username,
+            "total_revenue": float(total_revenue),
+            "total_orders": total_orders,
+            "orders": order_list,
+            "report_period": report_period, # Gửi kèm kỳ báo cáo
+            "report_date": timezone.now().strftime("%d/%m/%Y %H:%M")
+        })
 
 class ReviewViewSet(viewsets.ModelViewSet):
     queryset = Review.objects.all().order_by('-created_at')
