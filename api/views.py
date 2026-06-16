@@ -935,7 +935,11 @@ class StoreViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         if Store.objects.filter(owner=self.request.user).exists():
             raise ValidationError({"error": "Bạn đã có một hồ sơ cửa hàng. Vui lòng cập nhật thay vì tạo mới!"})
-        serializer.save(owner=self.request.user)
+        serializer.save(
+            owner=self.request.user, 
+            is_active=True, 
+            verification_status='pending'
+        )
         user = self.request.user
         user.role = 'seller'
         user.save()
