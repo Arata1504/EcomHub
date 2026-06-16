@@ -970,15 +970,21 @@ class StoreViewSet(viewsets.ModelViewSet):
         ).distinct().order_by('-created_at')
 
         report_period = "Toàn thời gian"
-        product_sales = OrderItem.objects.filter(order__in=valid_orders) \
-            .values('product__name') \
-            .annotate(total_qty=Sum('quantity')) \
-            .order_by('-total_qty')
 
-        product_list = [
-            {"name": item['product__name'], "qty": item['total_qty']} 
-            for item in product_sales
-        ]
+        products = Product.objects.filter(store=store).annotate(
+            total_sold=Sum('orderitem__quantity', filter=Q(orderitem__order__status__in=['delivered', 'completed']))
+        )
+
+        product_list = []
+        for p in products:
+            product_list.append({
+                "name": p.name,
+                "variant": "Tổng hợp", 
+                "sold": p.total_sold or 0,
+                "stock": p.stock,
+                "rating": float(p.rating),
+                "reviews": p.review_count
+            })
 
         # 2. LỌC ĐƠN HÀNG THEO NGÀY
         if start_date_str and end_date_str:
