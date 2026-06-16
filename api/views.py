@@ -198,51 +198,36 @@ def get_or_create_chat(request):
 
 @api_view(['POST'])
 def place_order(request):
-    # 1. Lấy dữ liệu từ request
     product_id = request.data.get('product_id')
     user_id = request.user.id
     quantity_to_buy = int(request.data.get('quantity', 1)) 
     
-    # 👉 LẤY THÊM TRƯỜNG BIẾN THỂ (Sẽ có giá trị "Chọn màu: Brown" hoặc None)
     variant_name = request.data.get('variant') 
 
     try:
         with transaction.atomic():
-            
-            # ==========================================
-            # TRƯỜNG HỢP 1: MUA SẢN PHẨM CÓ BIẾN THỂ
-            # ==========================================
             if variant_name:
-                # 👉 Khóa đúng dòng của Biến thể đó lại
-                # (Thay 'attribute_values' bằng đúng tên cột lưu chữ "Chọn màu: Brown" trong DB của bạn)
                 variant = ProductVariant.objects.select_for_update().get(
                     product_id=product_id, 
                     attribute_values=variant_name 
                 )
 
                 if variant.stock >= quantity_to_buy:
-                    # Trừ kho của biến thể
                     variant.stock -= quantity_to_buy
                     variant.save()
 
-                    # Tạo đơn hàng
                     Order.objects.create(
                         user_id=user_id,
-                        product_id=product_id, # Lưu ý: dùng product_id thay vì product nguyên cục
-                        # variant=variant_name, # Mở comment dòng này nếu bảng Order của bạn có cột lưu tên biến thể
+                        product_id=product_id, 
+                        # variant=variant_name, 
                         quantity=quantity_to_buy,
-                        total_price=variant.product.price * quantity_to_buy # Lấy giá từ sản phẩm gốc
+                        total_price=variant.product.price * quantity_to_buy 
                     )
                     return JsonResponse({"message": "Đặt hàng thành công!"}, status=200)
                 else:
                     return JsonResponse({"error": f"Rất tiếc, phân loại '{variant_name}' vừa bị người khác mua mất!"}, status=400)
 
-
-            # ==========================================
-            # TRƯỜNG HỢP 2: MUA SẢN PHẨM KHÔNG CÓ BIẾN THỂ
-            # ==========================================
             else:
-                # Khóa dòng sản phẩm gốc
                 product = Product.objects.select_for_update().get(id=product_id)
 
                 if product.stock >= quantity_to_buy:
@@ -261,7 +246,6 @@ def place_order(request):
 
     except Product.DoesNotExist:
         return JsonResponse({"error": "Sản phẩm không tồn tại"}, status=404)
-    # 👉 Bắt thêm lỗi nếu tìm không ra phân loại
     except ProductVariant.DoesNotExist: 
         return JsonResponse({"error": "Phân loại sản phẩm không tồn tại"}, status=404)
     except Exception as e:
@@ -358,7 +342,6 @@ def update_address(request):
         
     return Response({"error": "Vui lòng cung cấp địa chỉ hợp lệ"}, status=400)
 
-# --- PHẦN 2: VIEWSETS (CRUD Tự động) ---
 class SendOTPView(APIView):
     """API gửi mã OTP qua HTTP API của Brevo (Vượt tường lửa Render)"""
     def post(self, request):
@@ -433,10 +416,8 @@ class VerifyOTPView(APIView):
         return Response({"message": "Xác thực thành công!"}, status=status.HTTP_200_OK)
 
 class SystemChatBotView(APIView):
-    """API Trợ lý ảo AI - Đọc Database và trả lời khách hàng"""
     def post(self, request):
         user_message = request.data.get('message', '').strip()
-        # Hứng "trí nhớ" từ Flutter gửi lên
         previous_message = request.data.get('previous_message', '').strip()
 
         full_history = request.data.get('full_history', [])
@@ -598,8 +579,6 @@ class SystemChatBotView(APIView):
             # Nếu là các lỗi sập server khác
             return Response({"error": "Dạ, hệ thống đang bảo trì, bạn vui lòng thử lại sau nhé!"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-# 1. Quản lý Sản phẩm (Xem, Thêm, Sửa, Xóa)
-
 class ProductPagination(PageNumberPagination):
     page_size = 10
 
@@ -715,7 +694,6 @@ class OrderViewSet(viewsets.ModelViewSet):
         elif as_seller == 'true':
             return queryset.filter(items__product__store__owner=self.request.user).distinct()
 
-        # 👉 NẾU LÀ NGƯỜI MUA BÌNH THƯỜNG: Chỉ trả về đơn họ đã đặt
         return queryset.filter(user=self.request.user).distinct()
 
     @action(detail=True, methods=['PATCH'])

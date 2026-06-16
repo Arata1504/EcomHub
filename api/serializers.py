@@ -291,11 +291,9 @@ class ProductSerializer(serializers.ModelSerializer):
     
     # 👉 3. Hàm đếm số lượng từng loại sao
     def get_rating_breakdown(self, obj):
-        from django.db.models import Count
-        reviews = obj.reviews.all()
-        total = reviews.count()
+        reviews = obj.reviews.all() # Lấy danh sách đã gom sẵn
+        total = len(reviews)
         
-        # Mặc định tất cả đều là 0
         breakdown = [
             {'stars': 5, 'count': 0, 'percentage': 0.0},
             {'stars': 4, 'count': 0, 'percentage': 0.0},
@@ -305,27 +303,21 @@ class ProductSerializer(serializers.ModelSerializer):
         ]
         
         if total > 0:
-            # Nhóm và đếm trong Database
-            counts = reviews.values('rating').annotate(c=Count('id'))
-            for item in counts:
-                star = item['rating']
-                count = item['c']
-                index = 5 - star # 5 sao thì nằm ở index 0
-                
+            for r in reviews:
+                index = 5 - r.rating
                 if 0 <= index <= 4:
-                    breakdown[index]['count'] = count
-                    breakdown[index]['percentage'] = round(count / total, 2)
+                    breakdown[index]['count'] += 1
+            for b in breakdown:
+                b['percentage'] = round(b['count'] / total, 2)
                     
         return breakdown
     
     def get_review_count(self, obj):
-        return obj.reviews.count()
+        return len(obj.reviews.all())
 
     def get_rating(self, obj):
-        from django.db.models import Avg
-        # Lấy trung bình cộng cột 'rating' của tất cả bài đánh giá
-        avg_rating = obj.reviews.aggregate(Avg('rating'))['rating__avg']
-        return round(avg_rating, 1) if avg_rating else 0.0
+        reviews = obj.reviews.all()
+        return round(sum(r.rating for r in reviews) / len(reviews), 1) if reviews else 0.0
     
 class OrderItemSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source='product.name', read_only=True)

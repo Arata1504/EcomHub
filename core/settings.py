@@ -25,7 +25,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-((7n+havokw@!evpneabiax_bllncewetkj6&r!om9r002^n39'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = True
 
 ALLOWED_HOSTS = ['*']
 
@@ -94,9 +94,9 @@ WSGI_APPLICATION = 'core.wsgi.application'
 DATABASES = {
     # 'default': {
     #     'ENGINE': 'django.db.backends.postgresql',
-    #     'NAME': 'ecommerce_db',
-    #     'USER': 'postgres',
-    #     'PASSWORD': 'minhtan1504',
+    #     'NAME': 'ecomhub_db_zywo',
+    #     'USER': 'ecomhub_db_zywo_user',
+    #     'PASSWORD': 'grbC8ebRKyVEDVm1Zxhx2P4Co4mpCoVE',
     #     'HOST': 'localhost',
     #     'PORT': '5432',
     # }
@@ -147,7 +147,7 @@ STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 # Kích hoạt tính năng nén và phân phối file giao diện của Whitenoise
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+# STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 AUTH_USER_MODEL = 'api.User'
 
