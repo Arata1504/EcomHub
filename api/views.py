@@ -655,6 +655,19 @@ class ProductViewSet(viewsets.ModelViewSet):
         store_instance = self.request.user.store.first() 
         
         if store_instance:
+            # 👉 1. CHẶN NẾU SHOP BỊ KHÓA (is_active = False)
+            if not store_instance.is_active:
+                raise ValidationError({"error": "Cửa hàng của bạn đã bị khóa do vi phạm chính sách của sàn."})
+                
+            # 👉 2. CHẶN NẾU SHOP ĐANG CHỜ DUYỆT (verification_status = 'pending')
+            if store_instance.verification_status == 'pending':
+                raise ValidationError({"error": "Cửa hàng đang chờ duyệt. Bạn chưa thể đăng bán sản phẩm lúc này."})
+            
+            # (Tuỳ chọn) Chặn nếu hồ sơ bị từ chối
+            if store_instance.verification_status == 'rejected':
+                raise ValidationError({"error": "Hồ sơ đăng ký cửa hàng của bạn đã bị từ chối."})
+
+            # NẾU QUA HẾT BÀI KIỂM TRA -> CHO PHÉP LƯU SẢN PHẨM
             product = serializer.save(store=store_instance)
             
             images_data = self.request.FILES.getlist('images') 
