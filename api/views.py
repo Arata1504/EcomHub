@@ -970,6 +970,15 @@ class StoreViewSet(viewsets.ModelViewSet):
         ).distinct().order_by('-created_at')
 
         report_period = "Toàn thời gian"
+        product_sales = OrderItem.objects.filter(order__in=valid_orders) \
+            .values('product__name') \
+            .annotate(total_qty=Sum('quantity')) \
+            .order_by('-total_qty')
+
+        product_list = [
+            {"name": item['product__name'], "qty": item['total_qty']} 
+            for item in product_sales
+        ]
 
         # 2. LỌC ĐƠN HÀNG THEO NGÀY
         if start_date_str and end_date_str:
@@ -1010,6 +1019,7 @@ class StoreViewSet(viewsets.ModelViewSet):
             "total_revenue": float(total_revenue),
             "total_orders": total_orders,
             "orders": order_list,
+            "product_sales": product_list,
             "report_period": report_period, 
             "report_date": timezone.localtime(timezone.now()).strftime("%d/%m/%Y %H:%M")
         })
