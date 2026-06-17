@@ -895,7 +895,7 @@ class OrderViewSet(viewsets.ModelViewSet):
         # Nếu là khách hàng bình thường, chạy logic mặc định
         return super().partial_update(request, *args, **kwargs)
     
-    @action(detail=True, methods=['PATCH'])
+    @action(detail=True, methods=['PATCH'], url_path='cancel_order')
     @transaction.atomic 
     def cancel_order(self, request, pk=None):
         order = self.get_object()
