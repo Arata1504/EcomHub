@@ -20,8 +20,8 @@ from django.contrib.auth import authenticate
 from django.db import transaction
 from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
-from .models import Category, Chat, Message, OTPToken, Product, Order, OrderItem, ProductVariant, ProductImage, Review, ReviewImage, Store, CartItem, Voucher
-from .serializers import CategorySerializer, ChatSerializer, MessageSerializer, ProductSerializer, OrderSerializer, ReviewSerializer, StoreSerializer, UserSerializer, CartItemSerializer, VoucherSerializer
+from .models import Category, Chat, Message, OTPToken, Product, Order, OrderItem, ProductVariant, ProductImage, PurchaseOrder, PurchaseOrderItem, Review, ReviewImage, Store, CartItem, Voucher
+from .serializers import CategorySerializer, ChatSerializer, MessageSerializer, ProductSerializer, OrderSerializer, PurchaseOrderSerializer, ReviewSerializer, StoreSerializer, UserSerializer, CartItemSerializer, VoucherSerializer
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 from django.contrib.auth.hashers import make_password
@@ -1270,3 +1270,35 @@ class VoucherViewSet(viewsets.ModelViewSet):
         
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
+    
+class PurchaseOrderViewSet(viewsets.ModelViewSet):
+    queryset = PurchaseOrder.objects.all().order_by('-created_at')
+    serializer_class = PurchaseOrderSerializer
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic
+    def perform_create(self, serializer):
+        # 1. Tạo đơn nhập
+        store = self.request.user.store.first()
+        items_data = self.request.data.get('items', [])
+        
+        purchase_order = serializer.save(store=store)
+        
+        # 2. Xử lý từng sản phẩm nhập
+        for item in items_data:
+            product = Product.objects.select_for_update().get(id=item['product_id'])
+            qty = int(item['quantity'])
+            
+            # Cộng kho
+            product.stock += qty
+            product.save()
+            
+            # Tạo chi tiết đơn nhập
+            PurchaseOrderItem.objects.create(
+                purchase_order=purchase_order,
+                product=product,
+                quantity=qty,
+                import_price=item['import_price'],
+                variant=item.get('variant', 'Mặc định')
+            )
+

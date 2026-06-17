@@ -4,7 +4,7 @@ from urllib import request
 
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import Attribute, CartItem, Category, Chat, Message, Product, Order, ProductImage, Review, ReviewImage, Store, OrderItem, ProductVariant, AttributeValue, Voucher
+from .models import Attribute, CartItem, Category, Chat, Message, Product, Order, ProductImage, PurchaseOrder, PurchaseOrderItem, Review, ReviewImage, Store, OrderItem, ProductVariant, AttributeValue, Voucher
 import json
 
 User = get_user_model()
@@ -548,3 +548,22 @@ class VoucherSerializer(serializers.ModelSerializer):
                   'used_count', 'start_date', 'end_date', 'is_active', 'store_id']
         # Những trường này người bán không được tự ý sửa khi gửi request
         read_only_fields = ('id', 'store', 'used_count')
+
+class PurchaseOrderItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PurchaseOrderItem
+        fields = ['product', 'quantity', 'import_price', 'variant']
+
+class PurchaseOrderSerializer(serializers.ModelSerializer):
+    items = PurchaseOrderItemSerializer(many=True) # Nested serializer
+
+    class Meta:
+        model = PurchaseOrder
+        fields = ['id', 'supplier_name', 'note', 'items', 'created_at']
+
+    # Không cần tạo logic tại đây vì ta đã để ở ViewSet để xử lý logic 'cộng kho'
+    def create(self, validated_data):
+        items_data = validated_data.pop('items')
+        purchase_order = PurchaseOrder.objects.create(**validated_data)
+        # Các logic xử lý item và kho sẽ được ViewSet xử lý trong transaction.atomic
+        return purchase_order
