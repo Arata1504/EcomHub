@@ -843,6 +843,7 @@ class OrderViewSet(viewsets.ModelViewSet):
                         
                         # 👉 ĐỒNG BỘ: Trừ luôn ở kho gốc
                         product.stock -= quantity_to_buy
+                        product.sold_count += quantity_to_buy
                         product.save()
                     else:
                         raise ValidationError({"error": f"Không tìm thấy phân loại '{variant_str}' của sản phẩm '{product.name}'!"})
@@ -854,6 +855,7 @@ class OrderViewSet(viewsets.ModelViewSet):
                     
                     # Chỉ trừ kho gốc
                     product.stock -= quantity_to_buy
+                    product.sold_count += quantity_to_buy
                     product.save()
 
                 # Tạo OrderItem sau khi kho đã trừ thành công
@@ -931,7 +933,7 @@ class OrderViewSet(viewsets.ModelViewSet):
                         break
 
             # B. Trả lại kho cho Sản phẩm gốc (Dùng F expression để tránh lỗi đồng bộ)
-            Product.objects.filter(id=product.id).update(stock=F('stock') + quantity)
+            Product.objects.filter(id=product.id).update(stock=F('stock') + quantity, sold_count=F('sold_count') - quantity)
 
         # 4. Đổi trạng thái đơn hàng thành Đã hủy
         order.status = 'cancelled'
